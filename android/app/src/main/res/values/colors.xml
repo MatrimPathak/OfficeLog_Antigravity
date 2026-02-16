@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary_color">#2E88F6</color>
+    <color name="danger_color">#FF5959</color>
+    <color name="warning_color">#FF9F43</color>
+    <color name="success_color">#4CAF50</color>
+</resources>
