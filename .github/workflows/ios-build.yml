@@ -96,8 +96,26 @@ jobs:
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
 
       # ---------- BUILD ----------
-      - name: Build iOS IPA
-        run: flutter build ipa --release --no-pub
+      - name: Build iOS Archive (Verbose)
+        run: |
+          cd ios
+          xcodebuild \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath build/Runner.xcarchive \
+            archive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
+            | tee build.log
+
+      - name: Export IPA
+        run: |
+          cd ios
+          xcodebuild -exportArchive \
+            -archivePath build/Runner.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/ipa
 
       # ---------- RELEASE ----------
       - name: Upload to GitHub Release
