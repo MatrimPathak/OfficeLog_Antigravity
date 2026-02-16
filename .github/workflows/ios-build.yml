@@ -23,8 +23,37 @@ jobs:
         with:
           channel: stable
 
-      - name: Install Dependencies
+      - name: Disable Flutter analytics
+        run: flutter config --no-analytics
+
+      - name: Install Dart/Flutter dependencies
         run: flutter pub get
+
+      # ---------- CACHE COCOAPODS ----------
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cocoapods
+            ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      # ---------- CACHE DERIVED DATA ----------
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-deriveddata-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deriveddata-
+
+      # ---------- INSTALL PODS ----------
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
 
       # ---------- SET BUILD NUMBER ----------
       - name: Set Build Number from GitHub Run
@@ -39,10 +68,10 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add pubspec.yaml
-          git commit -m "Auto increment build number"
+          git commit -m "Auto increment build number" || echo "No changes to commit"
           git push
 
-      # ---------- INSTALL CERTIFICATE ----------
+      # ---------- SIGNING SETUP ----------
       - name: Setup signing keychain
         run: |
           security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
@@ -57,7 +86,6 @@ jobs:
             -k build.keychain \
             -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" \
             -A
-
           security find-identity -v build.keychain
 
       - name: Install provisioning profile
@@ -68,8 +96,8 @@ jobs:
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
 
       # ---------- BUILD ----------
-      - name: Build iOS Archive
-        run: flutter build ipa --release
+      - name: Build iOS IPA
+        run: flutter build ipa --release --no-pub
 
       # ---------- RELEASE ----------
       - name: Upload to GitHub Release
