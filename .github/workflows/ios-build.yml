@@ -43,12 +43,12 @@ jobs:
           git push
 
       # ---------- INSTALL CERTIFICATE ----------
-      - name: Setup signing keychain
+      - name: Create temporary keychain
         run: |
           security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
           security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
+          security list-keychains -s build.keychain
 
       - name: Import certificate
         run: |
@@ -56,16 +56,13 @@ jobs:
           security import certificate.p12 \
             -k build.keychain \
             -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" \
-            -A
-
-          security find-identity -v build.keychain
+            -T /usr/bin/codesign
 
       - name: Install provisioning profile
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "${{ secrets.IOS_PROVISION_PROFILE }}" | base64 --decode > profile.mobileprovision
-          UUID=$(grep -a -A1 UUID profile.mobileprovision | grep -io "[-A-F0-9]\{36\}")
-          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
 
       # ---------- BUILD ----------
       - name: Build iOS Archive
