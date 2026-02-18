@@ -129,5 +129,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app needs access to location when in the background to track attendance within the office geofence.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app needs access to location to track attendance within the office geofence.</string>
 </dict>
 </plist>
