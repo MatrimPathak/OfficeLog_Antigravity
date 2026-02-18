@@ -13,6 +13,7 @@ import '../settings/settings_screen.dart';
 import '../summary/summary_screen.dart';
 
 import '../../services/auto_checkin_service.dart';
+import '../../services/notification_service.dart';
 
 import '../../services/admin_service.dart';
 import 'widgets/delete_attendance_dialog.dart';
@@ -67,107 +68,127 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         data: (logs) {
           final attendanceLogs = logs.cast<AttendanceLog>();
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(monthlyAttendanceProvider);
-              ref.invalidate(holidaysStreamProvider);
-              await ref.read(monthlyAttendanceProvider.future);
-              await ref.read(holidaysStreamProvider.future);
-            },
-            child: SafeArea(
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(user),
-                    const SizedBox(height: 24),
-                    // Calendar section (Top)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            holidaysAsync.when(
-                              data: (holidays) =>
-                                  _buildCalendar(attendanceLogs, holidays),
-                              loading: () => _buildCalendar(attendanceLogs, []),
-                              error: (_, __) =>
-                                  _buildCalendar(attendanceLogs, []),
-                            ),
-                            const SizedBox(height: 16),
-                            Divider(color: Theme.of(context).dividerColor),
-                            const SizedBox(height: 16),
-                            // Legend
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          return Column(
+            children: [
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    ref.invalidate(monthlyAttendanceProvider);
+                    ref.invalidate(holidaysStreamProvider);
+                    await ref.read(monthlyAttendanceProvider.future);
+                    await ref.read(holidaysStreamProvider.future);
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(user),
+                        const SizedBox(height: 24),
+                        // Calendar section (Top)
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
                               children: [
-                                _buildLegendItem(
-                                  context,
-                                  'WORK DAY',
-                                  Colors.blueAccent,
+                                holidaysAsync.when(
+                                  data: (holidays) =>
+                                      _buildCalendar(attendanceLogs, holidays),
+                                  loading: () =>
+                                      _buildCalendar(attendanceLogs, []),
+                                  error: (_, __) =>
+                                      _buildCalendar(attendanceLogs, []),
                                 ),
-                                _buildLegendItem(
-                                  context,
-                                  'HOLIDAY',
-                                  Colors.orangeAccent,
-                                ),
-                                _buildLegendItem(
-                                  context,
-                                  'ATTENDED',
-                                  Colors.greenAccent,
+                                const SizedBox(height: 16),
+                                Divider(color: Theme.of(context).dividerColor),
+                                const SizedBox(height: 16),
+                                // Legend
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    _buildLegendItem(
+                                      context,
+                                      'WORK DAY',
+                                      Colors.blueAccent,
+                                    ),
+                                    _buildLegendItem(
+                                      context,
+                                      'HOLIDAY',
+                                      Colors.orangeAccent,
+                                    ),
+                                    _buildLegendItem(
+                                      context,
+                                      'ATTENDED',
+                                      Colors.greenAccent,
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                    // Stats Section
-                    _buildStatisticsGrid(
-                      attendanceLogs,
-                      holidaysAsync.value ?? [],
-                      calculateAsWorking,
-                      _focusedDay,
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Info Card
-                    yearlyLogsAsync.when(
-                      data: (yearlyLogs) {
-                        final stats = YearlyCalculator.calculateYearlyStats(
-                          year: currentYear,
-                          logs: yearlyLogs.cast<AttendanceLog>(),
-                          holidays: holidaysAsync.value ?? [],
-                          calculateHolidayAsWorking: calculateAsWorking,
-                        );
-                        return _buildInfoCard(
+                        // Stats Section
+                        _buildStatisticsGrid(
                           attendanceLogs,
                           holidaysAsync.value ?? [],
-                          stats.totalShortfall,
-                        );
-                      },
-                      loading: () => _buildInfoCard(
-                        attendanceLogs,
-                        holidaysAsync.value ?? [],
-                        0,
-                      ),
-                      error: (_, __) => _buildInfoCard(
-                        attendanceLogs,
-                        holidaysAsync.value ?? [],
-                        0,
-                      ),
+                          calculateAsWorking,
+                          _focusedDay,
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Info Card
+                        yearlyLogsAsync.when(
+                          data: (yearlyLogs) {
+                            final stats = YearlyCalculator.calculateYearlyStats(
+                              year: currentYear,
+                              logs: yearlyLogs.cast<AttendanceLog>(),
+                              holidays: holidaysAsync.value ?? [],
+                              calculateHolidayAsWorking: calculateAsWorking,
+                            );
+                            return Column(
+                              children: [
+                                _buildProgressCard(context, stats),
+                                const SizedBox(height: 24),
+                                if (isSameDay(_selectedDay, DateTime.now()))
+                                  _buildInfoCard(
+                                    attendanceLogs,
+                                    holidaysAsync.value ?? [],
+                                    stats.totalShortfall,
+                                  ),
+                              ],
+                            );
+                          },
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                        ),
+                        const SizedBox(height: 80), // Pad for button if needed
+                      ],
                     ),
-                    const SizedBox(height: 24),
-                    _buildLogButton(attendanceLogs, holidaysAsync),
-                    const SizedBox(height: 24),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              Container(
+                padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      offset: const Offset(0, -4),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: _buildLogButton(attendanceLogs, holidaysAsync),
+                ),
+              ),
+            ],
           );
         },
         loading: () =>
@@ -335,8 +356,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         });
       },
       onPageChanged: (focusedDay) {
+        // Calculate new selected day preserving day of month
+        final newMonth = focusedDay.month;
+        final newYear = focusedDay.year;
+        final oldDay = _selectedDay.day;
+
+        // standard days in month check
+        int maxDays = DateTime(newYear, newMonth + 1, 0).day;
+        int newDay = oldDay > maxDays ? maxDays : oldDay;
+
+        final newSelectedDay = DateTime(newYear, newMonth, newDay);
+
         setState(() {
           _focusedDay = focusedDay;
+          _selectedDay = newSelectedDay;
         });
         // Update the month provider so stats and logs follow the calendar
         ref.read(currentMonthProvider.notifier).update(focusedDay);
@@ -797,167 +830,219 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: isDayLogged
-              ? () =>
-                    _deleteAttendance(logs) // Pass logs to find ID
-              : _logAttendance,
           borderRadius: BorderRadius.circular(16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                isDayLogged ? Icons.delete_outline : Icons.fingerprint,
+          onTap: () async {
+            if (isDayLogged) {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (context) =>
+                    DeleteAttendanceDialog(date: _selectedDay),
+              );
+
+              if (confirmed == true) {
+                try {
+                  final logToDelete = logs.firstWhere(
+                    (log) => isSameDay(log.date, _selectedDay),
+                  );
+                  await ref
+                      .read(attendanceServiceProvider)
+                      ?.deleteAttendance(logToDelete.id);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Attendance Deleted')),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              }
+            } else {
+              // Log Attendance
+              final logTime = isSameDay(_selectedDay, DateTime.now())
+                  ? DateTime.now()
+                  : DateTime(
+                      _selectedDay.year,
+                      _selectedDay.month,
+                      _selectedDay.day,
+                      9,
+                      0,
+                    );
+
+              final log = AttendanceLog(
+                id: '${ref.read(currentUserProvider)!.uid}_${logTime.millisecondsSinceEpoch}',
+                userId: ref.read(currentUserProvider)!.uid,
+                date: logTime,
+                timestamp: logTime,
+                method: 'manual',
+              );
+
+              try {
+                await ref.read(attendanceServiceProvider)?.logAttendance(log);
+                // Cancel today's notification if we just logged for today
+                if (isSameDay(logTime, DateTime.now())) {
+                  NotificationService.cancelDailyNotification();
+                }
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Attendance Logged for ${DateFormat('MMMM d').format(_selectedDay)}!',
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            }
+          },
+          child: Center(
+            child: Text(
+              isDayLogged ? 'Delete Attendance' : 'Log Attendance',
+              style: const TextStyle(
                 color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(width: 8),
-              Text(
-                isDayLogged
-                    ? 'Delete Attendance (${DateFormat('MMM d').format(_selectedDay)})'
-                    : 'Log Attendance (${DateFormat('MMM d').format(_selectedDay)})',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ), // White-on-gradient is intentional
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Future<void> _logAttendance() async {
+  Widget _buildProgressCard(BuildContext context, YearlyStatsResult stats) {
+    // Determine the current month stats from the breakdown
+    // yearlyLogsAsync gives us the full year, so stats.monthlyBreakdown has it.
+    // We want the stats for the CURRENT visible month in the calendar?
+    // Or strictly the actual current month?
+    // User request: "Required progress which is the total number of required days to the number of days attended"
+    // Usually progress is monthly.
+
+    // Let's use the focused month from the calendar to find the right stats
+    MonthlyStats? currentMonthStats;
     try {
-      final user = ref.read(currentUserProvider);
-      if (user == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Error: User not found')),
-          );
-        }
-        return;
-      }
-
-      final service = ref.read(attendanceServiceProvider);
-      if (service == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Error: Attendance Service not initialized'),
-            ),
-          );
-        }
-        return;
-      }
-
-      // Guard: Weekend Check
-      if (_selectedDay.weekday == DateTime.saturday ||
-          _selectedDay.weekday == DateTime.sunday) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Cannot log attendance on weekends.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Guard: Holiday Check
-      final holidaysAsync = ref.read(holidaysStreamProvider);
-      final holidays = holidaysAsync.value ?? [];
-      if (holidays.any((h) => isSameDay(h, _selectedDay))) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Cannot log attendance on holidays.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      final now = DateTime.now();
-      // Use _selectedDay for the date of attendance
-      // Set time to 12:00 PM to avoid timezone issues with date comparisons
-      final logDate = DateTime(
-        _selectedDay.year,
-        _selectedDay.month,
-        _selectedDay.day,
-        12,
-        0,
-        0,
+      currentMonthStats = stats.monthlyBreakdown.firstWhere(
+        (m) => m.month == _focusedDay.month,
       );
+    } catch (_) {}
 
-      final log = AttendanceLog(
-        id: '${user.uid}_${logDate.millisecondsSinceEpoch}',
-        userId: user.uid,
-        date: logDate,
-        timestamp: now, // Created at now
-        method: 'manual',
-      );
+    if (currentMonthStats == null) return const SizedBox.shrink();
 
-      await service.logAttendance(log);
+    final double progress = currentMonthStats.requiredDays > 0
+        ? (currentMonthStats.presentDays / currentMonthStats.requiredDays)
+        : 0.0;
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Attendance Logged for ${DateFormat('MMMM d').format(_selectedDay)}!',
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'PROGRESS (${currentMonthStats.monthName})',
+              style: TextStyle(
+                color: Colors.grey[500],
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
             ),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error logging attendance: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteAttendance(List<AttendanceLog> logs) async {
-    try {
-      final user = ref.read(currentUserProvider);
-      if (user == null) return;
-
-      // Find log for selected day
-      final logToDelete = logs.firstWhere(
-        (log) => isSameDay(log.date, _selectedDay),
-        orElse: () => throw Exception('Log not found'),
-      );
-
-      final service = ref.read(attendanceServiceProvider);
-      if (service == null) return;
-
-      // Show confirmation dialog
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (context) => DeleteAttendanceDialog(date: _selectedDay),
-      );
-
-      if (confirm == true) {
-        await service.deleteAttendance(logToDelete.id);
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Attendance Deleted')));
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting attendance: $e')),
-        );
-      }
-    }
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total Attendance',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(height: 4),
+                    RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '${currentMonthStats.presentDays}',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                          TextSpan(
+                            text: ' / ${currentMonthStats.totalDays}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Required Progress',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(height: 4),
+                    RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '${currentMonthStats.presentDays}',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                          TextSpan(
+                            text: ' / ${currentMonthStats.requiredDays}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress > 1.0 ? 1.0 : progress,
+                minHeight: 8,
+                backgroundColor: Theme.of(context).canvasColor,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  progress >= 1.0 ? Colors.greenAccent : Colors.blueAccent,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

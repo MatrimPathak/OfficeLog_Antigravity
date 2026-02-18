@@ -8,6 +8,7 @@ import 'presentation/login/login_screen.dart';
 import 'presentation/onboarding/onboarding_screen.dart';
 import 'presentation/providers/providers.dart';
 import 'services/notification_service.dart';
+import 'services/background_service.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,6 +17,7 @@ void main() async {
   await Firebase.initializeApp();
   await Hive.initFlutter();
   await NotificationService.init();
+  await BackgroundService.init();
   await GoogleSignIn.instance.initialize();
 
   final prefs = await SharedPreferences.getInstance();

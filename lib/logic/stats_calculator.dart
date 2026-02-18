@@ -188,22 +188,44 @@ class YearlyStatsResult {
     // if the last month is in the past. However, usually this is called
     // for the 'current' year view.
 
-    return monthlyBreakdown
-        .where((m) {
-          // If it's the current year (we assume based on the data if it's YTD)
-          // For simplicity, we compare month number if we are in the same year.
-          // But summary_screen passes currentYear.
-          // Let's just use the logic: month < now.month (assuming current year).
-          // If this is a past year, all months should be counted.
-          // If this is a future year, no months should be counted.
-          // Since YearlyStatsResult doesn't have the year, this is slightly tricky
-          // to make universal without adding the year field.
+    // Calculate total shortfall from past months (Jan to Current Month - 1)
+    // Note: Variable pastShortfall removed as it was unused and replaced by strictPastShortfall
+    // Actually, previous logic was: only count if present < required.
+    // If we want "net" shortfall, we should probably just sum (required - present) for all past months.
+    // But typically shortfall is "missed days". You can't "make up" for January in February unless the policy says so.
+    // User says: "shortfall counter should go down each day logged in" (relative to current month requirement?).
+    // "Shortfall till the last month... but once the required number of days are done for the current month, this shortfall counter should go down"
+    // Interpretation:
+    // Base Shortfall = Sum of (Required - Present) for months < current, where Required > Present. (Strict past debt).
+    // Current Month Status:
+    // If CurrentPresent > CurrentRequired, then Surplus = CurrentPresent - CurrentRequired.
+    // DisplayShortfall = Max(0, PastShortfall - Surplus).
 
-          return m.month < now.month &&
+    int strictPastShortfall = monthlyBreakdown
+        .where(
+          (m) =>
+              m.month < now.month &&
               m.requiredDays > 0 &&
-              m.presentDays < m.requiredDays;
-        })
+              m.presentDays < m.requiredDays,
+        )
         .fold(0, (sum, m) => sum + (m.requiredDays - m.presentDays));
+
+    // Calculate current month surplus
+    int currentMonthSurplus = 0;
+    try {
+      final currentMonthStats = monthlyBreakdown.firstWhere(
+        (m) => m.month == now.month,
+      );
+      if (currentMonthStats.presentDays > currentMonthStats.requiredDays) {
+        currentMonthSurplus =
+            currentMonthStats.presentDays - currentMonthStats.requiredDays;
+      }
+    } catch (_) {
+      // Current month might not be in breakdown if logic changes, but it should be there.
+    }
+
+    int netShortfall = strictPastShortfall - currentMonthSurplus;
+    return netShortfall < 0 ? 0 : netShortfall;
   }
 
   YearlyStatsResult({

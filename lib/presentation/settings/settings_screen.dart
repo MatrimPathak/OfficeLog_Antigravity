@@ -9,6 +9,7 @@ import '../providers/providers.dart';
 import '../admin/admin_screen.dart';
 import 'widgets/delete_account_dialog.dart';
 import 'widgets/feedback_dialog.dart';
+import '../../services/background_service.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -421,24 +422,20 @@ class SettingsScreen extends ConsumerWidget {
         ),
       );
     } else if (permission == LocationPermission.always) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Great! You have "Allow all the time".')),
-      );
+      await BackgroundService.registerPeriodicTask();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Auto Check-in Enabled! (Background task scheduled)'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     }
   }
 
   void _showFeedbackDialog(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: const FeedbackDialog(),
-      ),
-    );
+    showDialog(context: context, builder: (context) => const FeedbackDialog());
   }
 
   void _showDeleteAccountDialog(BuildContext context, WidgetRef ref) async {

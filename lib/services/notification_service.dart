@@ -55,6 +55,9 @@ class NotificationService {
   }
 
   static Future<void> scheduleDailyNotification(TimeOfDay time) async {
+    // Cancel any existing daily reminder first to avoid duplicates or stale times
+    await cancelDailyNotification();
+
     final scheduledDate = _nextInstanceOfTime(time);
     developer.log(
       'NotificationService: scheduling daily notification at $scheduledDate '
@@ -62,7 +65,7 @@ class NotificationService {
     );
 
     await _notificationsPlugin.zonedSchedule(
-      id: 1,
+      id: 1, // Fixed ID for daily reminder
       title: 'Check Attendance',
       body: 'Don\'t forget to log your attendance today!',
       scheduledDate: scheduledDate,
@@ -88,6 +91,67 @@ class NotificationService {
     developer.log(
       'NotificationService: ${pendingNotifications.length} pending notifications: '
       '${pendingNotifications.map((n) => 'id=${n.id} title=${n.title}').join(', ')}',
+    );
+  }
+
+  static Future<void> cancelDailyNotification() async {
+    await _notificationsPlugin.cancel(id: 1);
+    developer.log('NotificationService: daily notification (id=1) cancelled');
+  }
+
+  /// Schedules the notification for the NEXT day (skipping today)
+  /// Used when attendance is logged for the current day.
+  static Future<void> scheduleNextDayNotification(TimeOfDay time) async {
+    await cancelDailyNotification();
+
+    final now = tz.TZDateTime.now(tz.local);
+    tz.TZDateTime scheduledDate = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
+      time.hour,
+      time.minute,
+    );
+
+    // If scheduled date is today or before, add 1 day to make it tomorrow
+    // actually, we WANT it to be tomorrow.
+    if (scheduledDate.isBefore(now) ||
+        scheduledDate.year == now.year &&
+            scheduledDate.month == now.month &&
+            scheduledDate.day == now.day) {
+      scheduledDate = scheduledDate.add(const Duration(days: 1));
+    }
+
+    // If it's still before now (unlikely unless time travel), add another day? No.
+    // The key is: we want to SKIP today's instance.
+    // If we use matchDateTimeComponents: DateTimeComponents.time, it repeats daily.
+    // If we schedule it for TOMORROW, it will run tomorrow and then repeat daily.
+
+    developer.log(
+      'NotificationService: scheduling NEXT daily notification at $scheduledDate '
+      '(hour: ${time.hour}, minute: ${time.minute})',
+    );
+
+    await _notificationsPlugin.zonedSchedule(
+      id: 1,
+      title: 'Check Attendance',
+      body: 'Don\'t forget to log your attendance today!',
+      scheduledDate: scheduledDate,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'daily_reminder_channel',
+          'Daily Reminder',
+          channelDescription: 'Daily reminder to log attendance',
+          importance: Importance.max,
+          priority: Priority.high,
+          largeIcon: DrawableResourceAndroidBitmap(
+            '@mipmap/ic_launcher_danger',
+          ),
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.time,
     );
   }
 
