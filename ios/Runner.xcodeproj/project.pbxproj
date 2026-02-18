@@ -171,7 +171,7 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
-				E9C64AA0FB5AA03D5D30DA74 /* Icons */,
+				E9C64AA0FB5AA03D5D30DA74 /* AlternateIcons */,
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
 				97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */,
@@ -184,7 +184,7 @@
 			path = Runner;
 			sourceTree = "<group>";
 		};
-		E9C64AA0FB5AA03D5D30DA74 /* Icons */ = {
+		E9C64AA0FB5AA03D5D30DA74 /* AlternateIcons */ = {
 			isa = PBXGroup;
 			children = (
 				B6630979AB0AB295DA75279C /* danger@2x.png */,
@@ -197,7 +197,7 @@
 				6F80B0D28A5B2D69F45BAC35 /* warning@3x.png */,
 				A01274152A1F81E02FA2D265 /* warning_1024.png */,
 			);
-			path = Icons;
+			path = AlternateIcons;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
