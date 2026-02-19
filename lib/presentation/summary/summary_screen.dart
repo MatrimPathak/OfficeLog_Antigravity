@@ -43,7 +43,7 @@ class SummaryScreen extends ConsumerWidget {
             color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
-        centerTitle: true,
+        centerTitle: false,
         actions: [
           PopupMenuButton<int>(
             initialValue: currentYear,
@@ -168,7 +168,11 @@ class SummaryScreen extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _buildAttendanceChart(context, stats.monthlyBreakdown),
+                      _buildAttendanceChart(
+                        context,
+                        ref,
+                        stats.monthlyBreakdown,
+                      ),
                       const SizedBox(height: 24),
 
                       // Monthly Breakdown (List)
@@ -530,7 +534,14 @@ class SummaryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildAttendanceChart(BuildContext context, List<MonthlyStats> data) {
+  Widget _buildAttendanceChart(
+    BuildContext context,
+    WidgetRef ref,
+    List<MonthlyStats> data,
+  ) {
+    final currentYear = ref.watch(currentYearProvider);
+    final now = DateTime.now();
+
     return Container(
       height: 200,
       padding: const EdgeInsets.all(16),
@@ -543,8 +554,18 @@ class SummaryScreen extends ConsumerWidget {
         BarChartData(
           gridData: const FlGridData(show: false),
           titlesData: FlTitlesData(
-            leftTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 35,
+                interval: 20,
+                getTitlesWidget: (value, meta) {
+                  return Text(
+                    '${value.toInt()}%',
+                    style: const TextStyle(color: Colors.grey, fontSize: 10),
+                  );
+                },
+              ),
             ),
             topTitles: const AxisTitles(
               sideTitles: SideTitles(showTitles: false),
@@ -576,12 +597,26 @@ class SummaryScreen extends ConsumerWidget {
           ),
           borderData: FlBorderData(show: false),
           barGroups: data.map((m) {
+            // Determine if the month is in the future
+            bool isFuture = DateTime(currentYear, m.month, 1).isAfter(now);
+
+            Color barColor;
+            if (isFuture) {
+              barColor = Colors.grey.withOpacity(0.5);
+            } else if (m.requiredDays > 0 && m.presentDays >= m.requiredDays) {
+              barColor = AppTheme.primaryColor; // Green/Blue success color
+            } else if (m.requiredDays > 0) {
+              barColor = Colors.orangeAccent;
+            } else {
+              barColor = Colors.grey.withOpacity(0.5);
+            }
+
             return BarChartGroupData(
               x: m.month - 1, // 0-based index
               barRods: [
                 BarChartRodData(
                   toY: m.attendancePercentage,
-                  color: AppTheme.primaryColor,
+                  color: barColor,
                   width: 12,
                   borderRadius: BorderRadius.circular(2),
                   backDrawRodData: BackgroundBarChartRodData(
@@ -595,7 +630,19 @@ class SummaryScreen extends ConsumerWidget {
               ],
             );
           }).toList(),
-          maxY: 100,
+          maxY: data.isEmpty
+              ? 100
+              : (data
+                            .map((e) => e.attendancePercentage)
+                            .reduce((a, b) => a > b ? a : b) >
+                        100
+                    ? (data
+                                      .map((e) => e.attendancePercentage)
+                                      .reduce((a, b) => a > b ? a : b) /
+                                  10)
+                              .ceil() *
+                          10.0
+                    : 100),
         ),
       ),
     );

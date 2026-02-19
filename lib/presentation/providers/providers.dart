@@ -203,30 +203,3 @@ class NotificationTimeNotifier extends Notifier<TimeOfDay> {
     }
   }
 }
-
-final dynamicIconEnabledProvider =
-    NotifierProvider<DynamicIconEnabledNotifier, bool>(
-      DynamicIconEnabledNotifier.new,
-    );
-
-class DynamicIconEnabledNotifier extends Notifier<bool> {
-  @override
-  bool build() {
-    final prefs = ref.watch(sharedPreferencesProvider);
-    return prefs.getBool('dynamic_icon_enabled') ?? false;
-  }
-
-  Future<void> toggle(bool value) async {
-    state = value;
-    final prefs = ref.read(sharedPreferencesProvider);
-    await prefs.setBool('dynamic_icon_enabled', value);
-
-    final user = ref.read(currentUserProvider);
-    if (user != null) {
-      // Sync to user profile settings
-      await ref.read(authServiceProvider).updateUserSettings(user.uid, {
-        'dynamic_icon_enabled': value,
-      });
-    }
-  }
-}

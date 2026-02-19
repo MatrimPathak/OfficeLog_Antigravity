@@ -315,9 +315,9 @@ extension YearlyCalculator on StatsCalculator {
       );
 
       double percentage = 0;
-      if (stats.required > 0) {
-        percentage = (stats.logged / stats.required) * 100;
-        if (percentage > 100) percentage = 100;
+      if (stats.businessDays > 0) {
+        percentage = (stats.logged / stats.businessDays) * 100;
+        // No cap at 100% as per user request to show actual working trend
       }
 
       monthlyBreakdown.add(

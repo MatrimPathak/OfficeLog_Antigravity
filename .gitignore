@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Sensitive Android/Firebase files
+android/key.properties
+android/app/*.jks
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+android/keystore_info.txt
+android/signing_report.txt

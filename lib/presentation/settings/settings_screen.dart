@@ -109,20 +109,7 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
                 _buildDivider(context),
-                _buildSettingsTile(
-                  context,
-                  icon: Icons.app_registration, // Icon for dynamic app icon
-                  iconColor: Colors.deepPurple,
-                  title: 'Dynamic App Icon',
-                  trailing: Switch.adaptive(
-                    value: ref.watch(dynamicIconEnabledProvider),
-                    onChanged: (val) {
-                      ref.read(dynamicIconEnabledProvider.notifier).toggle(val);
-                    },
-                    activeColor: Colors.deepPurple,
-                  ),
-                ),
-                _buildDivider(context),
+
                 _buildSettingsTile(
                   context,
                   icon: Icons.notifications,

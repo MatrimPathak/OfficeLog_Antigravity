@@ -16,9 +16,7 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round">
         
-        <service
-            android:name="com.solusibejo.flutter_dynamic_icon_plus.FlutterDynamicIconPlusService"
-            android:stopWithTask="false"/>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -55,45 +53,7 @@
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
             </intent-filter>
         </receiver>
-        <activity-alias
-            android:name=".MainActivityDanger"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher_danger"
-            android:roundIcon="@mipmap/ic_launcher_danger_round"
-            android:label="OfficeLog"
-            android:targetActivity=".MainActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
-        <activity-alias
-            android:name=".MainActivityWarning"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher_warning"
-            android:roundIcon="@mipmap/ic_launcher_warning_round"
-            android:label="OfficeLog"
-            android:targetActivity=".MainActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
-        <activity-alias
-            android:name=".MainActivitySuccess"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher_success"
-            android:roundIcon="@mipmap/ic_launcher_success_round"
-            android:label="OfficeLog"
-            android:targetActivity=".MainActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
+
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

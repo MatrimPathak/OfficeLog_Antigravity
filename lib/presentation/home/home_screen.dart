@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 import '../providers/providers.dart';
 import '../../data/models/attendance_log.dart';
 import '../../logic/stats_calculator.dart';
-import '../../core/services/app_icon_service.dart';
+
 import '../settings/settings_screen.dart';
 import '../summary/summary_screen.dart';
 
@@ -50,20 +50,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final calculateAsWorking =
         globalConfig['calculateHolidayAsWorking'] ?? false;
 
-    // Listen for attendance updates to refresh the app icon
-    ref.listen(monthlyAttendanceProvider, (previous, next) {
-      if (next.hasValue) {
-        AppIconService.updateAppIcon(ref);
-      }
-    });
-
-    // Also listen to the toggle to update immediately
-    ref.listen(dynamicIconEnabledProvider, (previous, next) {
-      AppIconService.updateAppIcon(ref);
-    });
-
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(80),
+        child: AppBar(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          automaticallyImplyLeading: false,
+          flexibleSpace: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: _buildHeader(user),
+            ),
+          ),
+        ),
+      ),
       body: attendanceAsync.when(
         data: (logs) {
           final attendanceLogs = logs.cast<AttendanceLog>();
@@ -80,12 +83,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   },
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildHeader(user),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
                         // Calendar section (Top)
                         Card(
                           child: Padding(
@@ -157,7 +159,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   _buildInfoCard(
                                     attendanceLogs,
                                     holidaysAsync.value ?? [],
-                                    stats.totalShortfall,
                                   ),
                               ],
                             );
@@ -203,7 +204,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       children: [
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(12),
+            height:
+                64, // Explicit height to match the settings button container
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: Theme.of(context).cardTheme.color,
               borderRadius: BorderRadius.circular(16),
@@ -222,32 +225,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     radius: 20,
                     child: Text(
                       user?.displayName?.substring(0, 1).toUpperCase() ?? 'U',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+                      style: TextStyle(color: Colors.white),
                     ),
                   ),
                 const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'OfficeLog',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        color: Theme.of(context).colorScheme.onSurface,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'OfficeLog',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Theme.of(context).colorScheme.onSurface,
+                          height: 1.2,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Welcome back, ${user?.displayName?.split(' ').first ?? 'User'}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[400],
-                        fontWeight: FontWeight.normal,
+                      Text(
+                        'Welcome back, ${user?.displayName?.split(' ').first ?? 'User'}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[400],
+                          fontWeight: FontWeight.normal,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -255,10 +262,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
         const SizedBox(width: 12),
         Container(
-          height: 64, // Match height of user card approximately
+          height: 64,
           width: 64,
           decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color, // Lighter card bg
+            color: Theme.of(context).cardTheme.color,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Theme.of(context).dividerColor),
           ),
@@ -527,7 +534,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Expanded(
               child: _buildStatCard(
                 context,
-                'Working',
+                'Required',
                 '${stats.required}',
                 Colors.blueAccent,
                 null,
@@ -591,7 +598,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Days',
+              value == '1' ? 'Day' : 'Days',
               style: TextStyle(color: Colors.grey[600], fontSize: 10),
             ),
           ],
@@ -600,11 +607,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildInfoCard(
-    List<AttendanceLog> logs,
-    List<DateTime> holidays,
-    int totalShortfall,
-  ) {
+  Widget _buildInfoCard(List<AttendanceLog> logs, List<DateTime> holidays) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final isWeekend =
@@ -673,40 +676,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     message,
                     style: TextStyle(color: Colors.grey[400], fontSize: 12),
                   ),
-                  if (totalShortfall > 0) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? AppTheme.shortfallBgDark
-                            : AppTheme.shortfallBgLight,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.warning_amber_rounded,
-                            color: AppTheme.dangerColor,
-                            size: 12,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Shortfall Alert: $totalShortfall days pending',
-                            style: const TextStyle(
-                              color: AppTheme.dangerColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -1028,7 +997,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            if (stats.totalShortfall > 0) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? AppTheme.shortfallBgDark
+                      : AppTheme.shortfallBgLight,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: AppTheme.dangerColor,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Shortfall Alert: ${stats.totalShortfall} ${stats.totalShortfall == 1 ? 'day' : 'days'} pending',
+                      style: const TextStyle(
+                        color: AppTheme.dangerColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
