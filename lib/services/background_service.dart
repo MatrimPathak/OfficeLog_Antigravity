@@ -3,14 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:geolocator/geolocator.dart';
 import 'dart:developer' as developer;
 
 import '../presentation/providers/providers.dart';
 import 'auto_checkin_service.dart';
 import 'notification_service.dart';
-import 'auth_service.dart';
-import 'attendance_service.dart';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
@@ -36,10 +33,10 @@ void callbackDispatcher() {
       // Cleanup
       container.dispose();
 
-      return Future.value(true);
+      return true;
     } catch (e) {
       developer.log('BackgroundService: error executing task $task: $e');
-      return Future.value(false);
+      return false;
     }
   });
 }
