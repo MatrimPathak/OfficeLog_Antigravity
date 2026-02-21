@@ -38,7 +38,7 @@ IOS_SIZES = [
     (1024, 1, 'Icon-App-1024x1024@1x.png'),
 ]
 
-def create_icon_variant(source_img, bg_color, size):
+def create_icon_variant(source_img, bg_color, size, remove_alpha=False):
     """Creates a standardized icon with the given background color and size."""
     # Create background
     icon = Image.new('RGBA', (size, size), bg_color)
@@ -63,6 +63,9 @@ def create_icon_variant(source_img, bg_color, size):
     y = (size - new_h) // 2
     
     icon.paste(resized_source, (x, y), resized_source)
+    
+    if remove_alpha:
+        return icon.convert('RGB')
     return icon
 
 def generate_android_icons(source_img):
@@ -132,7 +135,7 @@ def generate_ios_icons(source_img):
     # 1. Generate Primary (Default) Icons in Assets.xcassets
     for size_pt, scale, filename in IOS_SIZES:
         pixel_size = int(size_pt * scale)
-        icon = create_icon_variant(source_img, COLORS['primary'], pixel_size)
+        icon = create_icon_variant(source_img, COLORS['primary'], pixel_size, remove_alpha=True)
         icon.save(os.path.join(IOS_ASSETS_DIR, filename))
 
 def main():
