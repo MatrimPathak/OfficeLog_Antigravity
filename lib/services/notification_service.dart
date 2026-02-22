@@ -13,8 +13,19 @@ class NotificationService {
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
+    const DarwinInitializationSettings initializationSettingsDarwin =
+        DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        );
+
     const InitializationSettings initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid);
+        InitializationSettings(
+          android: initializationSettingsAndroid,
+          iOS: initializationSettingsDarwin,
+          macOS: initializationSettingsDarwin,
+        );
 
     await _notificationsPlugin.initialize(
       settings: initializationSettings,
@@ -42,8 +53,12 @@ class NotificationService {
           priority: Priority.high,
         );
 
+    const DarwinNotificationDetails darwinDetails = DarwinNotificationDetails();
+
     const NotificationDetails details = NotificationDetails(
       android: androidDetails,
+      iOS: darwinDetails,
+      macOS: darwinDetails,
     );
 
     await _notificationsPlugin.show(
@@ -76,10 +91,10 @@ class NotificationService {
           channelDescription: 'Daily reminder to log attendance',
           importance: Importance.max,
           priority: Priority.high,
-          largeIcon: DrawableResourceAndroidBitmap(
-            '@mipmap/ic_launcher_danger',
-          ),
+          // Removed largeIcon as background isolates sometimes fail to resolve it
         ),
+        iOS: DarwinNotificationDetails(),
+        macOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
@@ -123,11 +138,6 @@ class NotificationService {
       scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
 
-    // If it's still before now (unlikely unless time travel), add another day? No.
-    // The key is: we want to SKIP today's instance.
-    // If we use matchDateTimeComponents: DateTimeComponents.time, it repeats daily.
-    // If we schedule it for TOMORROW, it will run tomorrow and then repeat daily.
-
     developer.log(
       'NotificationService: scheduling NEXT daily notification at $scheduledDate '
       '(hour: ${time.hour}, minute: ${time.minute})',
@@ -145,10 +155,10 @@ class NotificationService {
           channelDescription: 'Daily reminder to log attendance',
           importance: Importance.max,
           priority: Priority.high,
-          largeIcon: DrawableResourceAndroidBitmap(
-            '@mipmap/ic_launcher_danger',
-          ),
+          // Removed largeIcon as background isolates sometimes fail to resolve it
         ),
+        iOS: DarwinNotificationDetails(),
+        macOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
@@ -178,16 +188,49 @@ class NotificationService {
   }
 
   static Future<void> requestPermissions() async {
+    // Android
     final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
         _notificationsPlugin
             .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin
             >();
 
-    final bool? notifGranted = await androidImplementation
+    final bool? androidGranted = await androidImplementation
         ?.requestNotificationsPermission();
     developer.log(
-      'NotificationService: notification permission granted: $notifGranted',
+      'NotificationService: android notification permission granted: $androidGranted',
+    );
+
+    // iOS
+    final IOSFlutterLocalNotificationsPlugin? iosImplementation =
+        _notificationsPlugin
+            .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin
+            >();
+
+    final bool? iosGranted = await iosImplementation?.requestPermissions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    developer.log(
+      'NotificationService: ios notification permission granted: $iosGranted',
+    );
+
+    // macOS
+    final MacOSFlutterLocalNotificationsPlugin? macosImplementation =
+        _notificationsPlugin
+            .resolvePlatformSpecificImplementation<
+              MacOSFlutterLocalNotificationsPlugin
+            >();
+
+    final bool? macosGranted = await macosImplementation?.requestPermissions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    developer.log(
+      'NotificationService: macos notification permission granted: $macosGranted',
     );
   }
 }

@@ -1,0 +1,78 @@
+workflows:
+  officelog-release:
+    name: OfficeLog Release Build
+    instance_type: mac_mini_m2
+
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
+      vars:
+        KEY_ALIAS: officelog
+
+      groups:
+        - keystore_credentials  # optional if using CM groups
+
+    triggering:
+      events:
+        - push
+        - pull_request
+        - tag
+      branch_patterns:
+        - pattern: "*"
+          include: true
+      tag_patterns:
+        - pattern: "*"
+          include: true
+
+    scripts:
+      - name: Post clone setup
+        script: |
+          # Reconstruct google-services.json
+          echo $FCM_GOOGLE_SERVICES_JSON | base64 --decode > android/app/google-services.json
+
+          # Reconstruct keystore
+          echo $KEYSTORE_BASE64 | base64 --decode > android/app/officelog-release-key.jks
+
+          # Reconstruct key.properties
+          echo "storePassword=$STORE_PASSWORD" > android/key.properties
+          echo "keyPassword=$KEY_PASSWORD" >> android/key.properties
+          echo "keyAlias=$KEY_ALIAS" >> android/key.properties
+          echo "storeFile=officelog-release-key.jks" >> android/key.properties
+
+          # Fix Windows line endings
+          tr -d '\r' < pubspec.yaml > pubspec.yaml.tmp && mv pubspec.yaml.tmp pubspec.yaml
+
+          # Update build number
+          sed -i '' "s/version: \(.*\)+\(.*\)/version: \1+$PROJECT_BUILD_NUMBER/g" pubspec.yaml
+
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      - name: Build Android App Bundle
+        script: flutter build appbundle --release --flavor android-production -t lib/main_prod.dart
+
+      - name: Build Android APK
+        script: flutter build apk --release --flavor android-production -t lib/main_prod.dart
+
+      - name: Build iOS
+        script: flutter build ipa --release --flavor ios-production -t lib/main_prod.dart
+
+    artifacts:
+      - build/app/outputs/**/*.aab
+      - build/app/outputs/**/*.apk
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      email:
+        recipients:
+          - matrimpathak1999@gmail.com
+        notify:
+          success: true
+          failure: true
+
+      app_store_connect:
+        api_key: Codemagic Key (Key: VQNX7A836V)
+        submit_to_testflight: true
+        submit_to_app_store: true

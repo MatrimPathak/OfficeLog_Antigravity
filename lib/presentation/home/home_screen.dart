@@ -43,9 +43,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final attendanceAsync = ref.watch(monthlyAttendanceProvider);
     final holidaysAsync = ref.watch(holidaysStreamProvider);
-    final yearlyLogsAsync = ref.watch(yearlyAttendanceProvider);
+    final yearlyLogsAsync = ref.watch(
+      yearlyAttendanceProvider(DateTime.now().year),
+    );
     final user = ref.watch(currentUserProvider);
-    final currentYear = ref.watch(currentYearProvider);
+    final currentYear = DateTime.now().year;
     final globalConfig = ref.watch(globalConfigProvider).value ?? {};
     final calculateAsWorking =
         globalConfig['calculateHolidayAsWorking'] ?? false;
@@ -112,11 +114,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   children: [
                                     _buildLegendItem(
                                       context,
-                                      'WORK DAY',
-                                      Colors.blueAccent,
-                                    ),
-                                    _buildLegendItem(
-                                      context,
                                       'HOLIDAY',
                                       Colors.orangeAccent,
                                     ),
@@ -166,7 +163,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           loading: () => const SizedBox.shrink(),
                           error: (_, __) => const SizedBox.shrink(),
                         ),
-                        const SizedBox(height: 80), // Pad for button if needed
                       ],
                     ),
                   ),
@@ -817,15 +813,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       .read(attendanceServiceProvider)
                       ?.deleteAttendance(logToDelete.id);
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Attendance Deleted')),
-                    );
+                    AppTheme.showSuccessSnackBar(context, 'Attendance Deleted');
                   }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                    AppTheme.showErrorSnackBar(context, 'Error: $e');
                   }
                 }
               }
@@ -856,23 +848,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   NotificationService.cancelDailyNotification();
                 }
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Attendance Logged for ${DateFormat('MMMM d').format(_selectedDay)}!',
-                      ),
-                      backgroundColor: Colors.green,
-                    ),
+                  AppTheme.showSuccessSnackBar(
+                    context,
+                    'Attendance Logged for ${DateFormat('MMMM d').format(_selectedDay)}!',
                   );
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
+                  AppTheme.showErrorSnackBar(context, 'Error: $e');
                 }
               }
             }

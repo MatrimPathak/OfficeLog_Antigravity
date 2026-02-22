@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/admin_service.dart';
-import '../../data/models/office_location.dart';
+import 'widgets/add_holiday_dialog.dart';
+import 'widgets/add_office_location_dialog.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({super.key});
@@ -78,7 +79,12 @@ class HolidaysTab extends ConsumerWidget {
           return Center(child: Text('Error: ${snapshot.error}'));
         }
 
-        final holidays = snapshot.data ?? [];
+        final holidays = List<Map<String, dynamic>>.from(snapshot.data ?? []);
+        holidays.sort((a, b) {
+          final dateA = (a['date'] as dynamic).toDate() as DateTime;
+          final dateB = (b['date'] as dynamic).toDate() as DateTime;
+          return dateA.compareTo(dateB); // Accending order
+        });
 
         return Stack(
           children: [
@@ -87,6 +93,17 @@ class HolidaysTab extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final holiday = holidays[index];
                 final date = (holiday['date'] as dynamic).toDate();
+
+                final List<String>? officeLocs =
+                    (holiday['officeLocations'] as List<dynamic>?)
+                        ?.cast<String>();
+                final String officeLocString =
+                    officeLocs != null && officeLocs.isNotEmpty
+                    ? officeLocs.join(', ')
+                    : holiday['officeLocation'] ?? 'All Offices';
+
+                final bool isRecurring = holiday['isRecurring'] ?? false;
+
                 return Container(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -98,19 +115,37 @@ class HolidaysTab extends ConsumerWidget {
                     border: Border.all(color: Theme.of(context).dividerColor),
                   ),
                   child: ListTile(
+                    onTap: () => _showAddHolidayDialog(context, ref, holiday),
+                    isThreeLine: true,
                     title: Text(
                       holiday['name'],
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
-                    subtitle: Text(
-                      DateFormat.yMMMd().format(date),
-                      style: TextStyle(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withOpacity(0.6),
-                      ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          DateFormat.yMMMd().format(date),
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                        ),
+                        Text(
+                          isRecurring
+                              ? '$officeLocString • Recurring'
+                              : officeLocString,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.8),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                     trailing: IconButton(
                       icon: const Icon(
@@ -131,7 +166,7 @@ class HolidaysTab extends ConsumerWidget {
               bottom: 16,
               right: 16,
               child: FloatingActionButton(
-                onPressed: () => _showAddHolidayDialog(context, ref),
+                onPressed: () => _showAddHolidayDialog(context, ref, null),
                 child: const Icon(Icons.add),
               ),
             ),
@@ -141,63 +176,14 @@ class HolidaysTab extends ConsumerWidget {
     );
   }
 
-  void _showAddHolidayDialog(BuildContext context, WidgetRef ref) async {
-    final nameController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-
+  void _showAddHolidayDialog(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, dynamic>? holiday,
+  ) async {
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Add Holiday'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Holiday Name'),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Text('Date: ${DateFormat.yMMMd().format(selectedDate)}'),
-                  IconButton(
-                    icon: const Icon(Icons.calendar_today),
-                    onPressed: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100),
-                      );
-                      if (picked != null) {
-                        setState(() => selectedDate = picked);
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (nameController.text.isNotEmpty) {
-                  ref
-                      .read(adminServiceProvider)
-                      .addHoliday(selectedDate, nameController.text);
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      ),
+      builder: (context) => AddHolidayDialog(ref: ref, holiday: holiday),
     );
   }
 }
@@ -275,61 +261,9 @@ class LocationsTab extends ConsumerWidget {
   }
 
   void _showAddLocationDialog(BuildContext context, WidgetRef ref) {
-    final nameController = TextEditingController();
-    final addressController = TextEditingController();
-    final latController = TextEditingController();
-    final lngController = TextEditingController();
-
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Office Location'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              TextField(
-                controller: addressController,
-                decoration: const InputDecoration(labelText: 'Address'),
-              ),
-              TextField(
-                controller: latController,
-                decoration: const InputDecoration(labelText: 'Latitude'),
-                keyboardType: TextInputType.number,
-              ),
-              TextField(
-                controller: lngController,
-                decoration: const InputDecoration(labelText: 'Longitude'),
-                keyboardType: TextInputType.number,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final loc = OfficeLocation(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                name: nameController.text,
-                address: addressController.text,
-                latitude: double.tryParse(latController.text) ?? 0,
-                longitude: double.tryParse(lngController.text) ?? 0,
-              );
-              ref.read(adminServiceProvider).addOfficeLocation(loc);
-              Navigator.pop(context);
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+      builder: (context) => AddOfficeLocationDialog(ref: ref),
     );
   }
 }

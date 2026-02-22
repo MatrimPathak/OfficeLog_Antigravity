@@ -18,6 +18,7 @@ void main() async {
   await Hive.initFlutter();
   await NotificationService.init();
   await BackgroundService.init();
+  await BackgroundService.checkAndRegisterTask(); // Ensure background task is persisted
   await GoogleSignIn.instance.initialize();
 
   final prefs = await SharedPreferences.getInstance();

@@ -5,97 +5,78 @@ OfficeLog is a comprehensive Flutter application designed to help users track th
 ## Features
 
 - **Authentication**: Secure login via Google Sign-In.
-- **Attendance Tracking**: Log daily attendance with ease.
-- **Smart Onboarding**: Location-based office setup during onboarding.
-- **Statistics & Visualization**: View monthly attendance breakdowns and visual charts using `fl_chart`.
-- **Theming**: Full support for both Light and Dark themes, adapting to user preference.
-- **Notifications**: Scheduled local notifications to remind users to log their attendance.
-- **Dynamic App Icon**: Support for dynamic app icon updating (Android/iOS).
-- **Cloud Sync**: Real-time data synchronization using Firebase Firestore.
-- **Offline Persistence**: Local caching with Hive and Shared Preferences for improved performance.
+- **Smart Attendance Tracking**: 
+  - **Manual Log**: Quick one-tap attendance logging.
+  - **Auto Check-in**: Background location-based logging (Geofencing) within 200m of office.
+- **Statistics & Visualization**:
+  - **Progress Tracking**: Compare attended days vs required days for the month.
+  - **Shortfall Alerts**: Identification of pending attendance days.
+  - **Visual Charts**: Comprehensive yearly and monthly trends using `fl_chart`.
+- **Admin Panel**: Centralized management for holidays, office locations, and global configurations.
+- **Standardized Feedback**: Premium, consistent floating snackbars for success, errors, and warnings.
+- **High-Performance UI**:
+  - **Theming**: Full adaptive Light and Dark themes.
+  - **Glassmorphism**: Modern, translucent UI elements for a premium feel.
+- **Reliable Notifications**: Automated reminders for daily logging, with support for iOS and Android.
+- **Offline Persistence**: Fast, persistent storage using Hive and Shared Preferences.
 
 ## Tech Stack
 
-- **Framework**: [Flutter](https://flutter.dev/)
+- **Framework**: [Flutter](https://flutter.dev/) (SDK 3.19.0+)
 - **Language**: [Dart](https://dart.dev/)
 - **State Management**: [Riverpod](https://riverpod.dev/)
-- **Backend**: [Firebase](https://firebase.google.com/) (Authentication, Firestore)
+- **Backend**: [Firebase](https://firebase.google.com/) (Auth, Firestore)
 - **Local Storage**: [Hive](https://docs.hivedb.dev/), [Shared Preferences](https://pub.dev/packages/shared_preferences)
-- **Maps & Location**: [Geolocator](https://pub.dev/packages/geolocator)
-- **Notifications**: [Flutter Local Notifications](https://pub.dev/packages/flutter_local_notifications)
-
-## Getting Started
-
-Follow these instructions to get a copy of the project up and running on your local machine.
-
-### Prerequisites
-
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (Version 3.9.0 or higher)
-- [Dart SDK](https://dart.dev/get-dart)
-- A Firebase project with Authentication and Firestore enabled.
-
-### Installation
-
-1.  **Clone the repository**
-    ```bash
-    git clone https://github.com/yourusername/office_log.git
-    cd office_log
-    ```
-
-2.  **Install Dependencies**
-    ```bash
-    flutter pub get
-    ```
-
-3.  **Firebase Configuration**
-    - This project uses Firebase. You need to provide your own configuration files.
-    - **Android**: Place `google-services.json` in `android/app/`.
-    - **iOS**: Place `GoogleService-Info.plist` in `ios/Runner/`.
-
-4.  **Run the Application**
-    ```bash
-    flutter run
-    ```
+- **Maps & Location**: [Geolocator](https://pub.dev/packages/geolocator), [Permission Handler](https://pub.dev/packages/permission_handler)
+- **Notifications**: [Flutter Local Notifications](https://pub.dev/packages/flutter_local_notifications) (v20.0.0+)
+- **CI/CD**: [Codemagic](https://codemagic.io/)
 
 ## Project Structure
 
 ```
 lib/
-├── core/               # Core utilities, constants, and theme definitions
-├── presentation/       # UI layer containing screens and widgets
-│   ├── home/           # Home screen and related widgets
-│   ├── login/          # Login screen
-│   ├── onboarding/     # Onboarding flow
-│   └── providers/      # Riverpod providers for state management
-├── services/           # Service layer (Notification, Auth, etc.)
-└── main.dart           # Application entry point
+├── core/               # Theme, constants, and global utility helpers
+├── data/               # Models and data layer logic
+├── logic/              # Business logic (Stats calculators)
+├── presentation/       # UI Layer
+│   ├── admin/          # Admin-only management screens
+│   ├── home/           # Dashboard and Calendar view
+│   ├── login/          # Google Auth integration
+│   ├── onboarding/     # Initial setup and location picker
+│   ├── settings/       # User preferences and feedback
+│   └── summary/        # Detailed charts and breakdown list
+├── services/           # Service layer (Auth, Admin, Notification, Auto Check-in)
+└── main.dart           # Application bootstrapper
 ```
 
-## Setup & Configuration
+## Getting Started
 
-- **Environment**: Ensure your Flutter environment matches the SDK constraints in `pubspec.yaml`.
-- **Permissions**: The app requires Location and Notification permissions to function correctly. These are requested at runtime.
+### Prerequisites
+- Flutter SDK 3.19.0+
+- A Google Cloud/Firebase project with Google Auth and Firestore enabled.
 
-## Contributing
+### Installation
+1.  **Clone and Install**
+    ```bash
+    git clone https://github.com/yourusername/office_log.git
+    cd office_log
+    flutter pub get
+    ```
+2.  **Configuration**
+    - Place `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) in their respective directories.
+    - Run `python generate_icons.py` to set up brand assets.
 
-1. Fork the project.
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4. Push to the branch (`git push origin feature/AmazingFeature`).
-5. Open a Pull Request.
+## Development Utilities
 
-## Development
- 
- ### Generating App Icons
- The project includes a Python script to generate app icons for both Android and iOS.
- 
- 1.  Place your source image as `Logo_Source.png` in the root directory.
- 2.  Run the script:
-     ```bash
-     python generate_icons.py
-     ```
-     *Note: Requires [Pillow](https://pypi.org/project/Pillow/) library (`pip install Pillow`).*
- 
- ## License
+### Asset Generation
+The project uses a custom Python script to maintain icon consistency:
+```bash
+python generate_icons.py
+```
+*Requires `Pillow` library.*
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Automated Builds
+The project is configured for **Codemagic**. See `codemagic.yaml` for build pipeline details.
+
+## License
+This project is licensed under the MIT License.

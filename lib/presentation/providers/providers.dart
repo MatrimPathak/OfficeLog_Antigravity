@@ -59,20 +59,22 @@ final monthlyAttendanceProvider = StreamProvider<List<dynamic>>((ref) {
   return Stream.value([]);
 });
 
-final currentYearProvider = NotifierProvider<CurrentYearNotifier, int>(
-  CurrentYearNotifier.new,
+final summaryYearProvider = NotifierProvider<SummaryYearNotifier, int>(
+  SummaryYearNotifier.new,
 );
 
-class CurrentYearNotifier extends Notifier<int> {
+class SummaryYearNotifier extends Notifier<int> {
   @override
   int build() => DateTime.now().year;
   void update(int year) => state = year;
 }
 
-final yearlyAttendanceProvider = StreamProvider<List<dynamic>>((ref) {
+final yearlyAttendanceProvider = StreamProvider.family<List<dynamic>, int>((
+  ref,
+  year,
+) {
   // dynamic to avoid circle
   final service = ref.watch(attendanceServiceProvider);
-  final year = ref.watch(currentYearProvider);
 
   if (service != null) {
     return service.getYearlyAttendanceStream(year);

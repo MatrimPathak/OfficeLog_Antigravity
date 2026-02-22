@@ -173,6 +173,7 @@ class StatsResult {
 }
 
 class YearlyStatsResult {
+  final int year;
   final int ytdPresent;
   final int ytdRequired;
   final int totalYearlyRequired; // New field for full year requirement
@@ -184,18 +185,18 @@ class YearlyStatsResult {
 
   int get totalShortfall {
     final now = DateTime.now();
-    // We don't have the 'year' here, but we can infer if it's a past year
-    // if the last month is in the past. However, usually this is called
-    // for the 'current' year view.
 
-    // Calculate total shortfall from past months (Jan to Current Month - 1)
-    // Note: Variable pastShortfall removed as it was unused and replaced by strictPastShortfall
-    // Actually, previous logic was: only count if present < required.
-    // If we want "net" shortfall, we should probably just sum (required - present) for all past months.
-    // But typically shortfall is "missed days". You can't "make up" for January in February unless the policy says so.
-    // User says: "shortfall counter should go down each day logged in" (relative to current month requirement?).
-    // "Shortfall till the last month... but once the required number of days are done for the current month, this shortfall counter should go down"
-    // Interpretation:
+    // If viewing a future year, no shortfall
+    if (year > now.year) return 0;
+
+    // If viewing a past year, shortfall is the sum of all missed days for the whole year
+    if (year < now.year) {
+      return monthlyBreakdown
+          .where((m) => m.requiredDays > 0 && m.presentDays < m.requiredDays)
+          .fold(0, (sum, m) => sum + (m.requiredDays - m.presentDays));
+    }
+
+    // Current Year Logic:
     // Base Shortfall = Sum of (Required - Present) for months < current, where Required > Present. (Strict past debt).
     // Current Month Status:
     // If CurrentPresent > CurrentRequired, then Surplus = CurrentPresent - CurrentRequired.
@@ -229,6 +230,7 @@ class YearlyStatsResult {
   }
 
   YearlyStatsResult({
+    required this.year,
     required this.ytdPresent,
     required this.ytdRequired,
     required this.totalYearlyRequired,
@@ -396,6 +398,7 @@ extension YearlyCalculator on StatsCalculator {
     }
 
     return YearlyStatsResult(
+      year: year,
       ytdPresent: ytdPresent,
       ytdRequired: ytdRequired,
       totalYearlyRequired: totalYearlyRequired,

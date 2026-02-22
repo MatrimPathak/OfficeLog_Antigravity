@@ -202,4 +202,66 @@ class AppTheme {
       ),
     );
   }
+
+  // ── Snackbar Helpers ────────────────────────────────────────────────
+  static void showSuccessSnackBar(BuildContext context, String message) {
+    _showSnackBar(
+      context,
+      message: message,
+      backgroundColor: successColor,
+      icon: Icons.check_circle_outline,
+    );
+  }
+
+  static void showErrorSnackBar(BuildContext context, String message) {
+    _showSnackBar(
+      context,
+      message: message,
+      backgroundColor: dangerColor,
+      icon: Icons.error_outline,
+    );
+  }
+
+  static void showWarningSnackBar(BuildContext context, String message) {
+    _showSnackBar(
+      context,
+      message: message,
+      backgroundColor: warningColor,
+      icon: Icons.warning_amber_rounded,
+    );
+  }
+
+  static void _showSnackBar(
+    BuildContext context, {
+    required String message,
+    required Color backgroundColor,
+    required IconData icon,
+  }) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: backgroundColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        elevation: 4,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
 }

@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/admin_service.dart';
+import '../../services/background_service.dart';
 import '../../data/models/office_location.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
@@ -53,12 +54,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               _selectedLocation!.latitude,
               _selectedLocation!.longitude,
             );
+
+        // --- AUTONOMOUS REGISTRATION ---
+        // As soon as the user finishes onboarding, aggressively attempt to schedule the background heartbeat.
+        await BackgroundService.checkAndRegisterTask();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
+        AppTheme.showErrorSnackBar(context, 'Error: $e');
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

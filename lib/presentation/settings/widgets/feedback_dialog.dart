@@ -23,9 +23,7 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
 
   Future<void> _submit() async {
     if (_rating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a star rating')),
-      );
+      AppTheme.showWarningSnackBar(context, 'Please select a star rating');
       return;
     }
 
@@ -44,18 +42,11 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
 
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Thank you for your feedback! 🎉'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      AppTheme.showSuccessSnackBar(context, 'Thank you for your feedback!');
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to send feedback: $e')));
+      AppTheme.showErrorSnackBar(context, 'Failed to send feedback: $e');
     }
   }
 

@@ -167,9 +167,27 @@ class SettingsScreen extends ConsumerWidget {
                     final status = await Permission.ignoreBatteryOptimizations
                         .request();
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Status: ${status.name}')),
-                      );
+                      if (status.isGranted) {
+                        AppTheme.showSuccessSnackBar(
+                          context,
+                          'Battery optimization ignored. Background tasks will run reliably.',
+                        );
+                      } else if (status.isDenied) {
+                        AppTheme.showWarningSnackBar(
+                          context,
+                          'Battery optimization is still active. Background tasks may be delayed.',
+                        );
+                      } else if (status.isPermanentlyDenied) {
+                        AppTheme.showErrorSnackBar(
+                          context,
+                          'Permission permanently denied. Please enable "Allow background activity" in app settings.',
+                        );
+                      } else {
+                        AppTheme.showWarningSnackBar(
+                          context,
+                          'Status: ${status.name}',
+                        );
+                      }
                     }
                   },
                 ),
@@ -379,9 +397,7 @@ class SettingsScreen extends ConsumerWidget {
 
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location permission is denied.')),
-      );
+      AppTheme.showErrorSnackBar(context, 'Location permission is denied.');
       return;
     }
 
@@ -411,11 +427,9 @@ class SettingsScreen extends ConsumerWidget {
     } else if (permission == LocationPermission.always) {
       await BackgroundService.registerPeriodicTask();
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Auto Check-in Enabled! (Background task scheduled)'),
-            backgroundColor: Colors.green,
-          ),
+        AppTheme.showSuccessSnackBar(
+          context,
+          'Auto Check-in Enabled! (Background task scheduled)',
         );
       }
     }
@@ -450,9 +464,7 @@ class SettingsScreen extends ConsumerWidget {
       } catch (e) {
         if (context.mounted) {
           Navigator.pop(context); // Remove loading indicator
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Error: $e')));
+          AppTheme.showErrorSnackBar(context, 'Error: $e');
         }
       }
     }

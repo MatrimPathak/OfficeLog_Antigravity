@@ -44,7 +44,7 @@ def create_icon_variant(source_img, bg_color, size, remove_alpha=False):
     icon = Image.new('RGBA', (size, size), bg_color)
     
     # Calculate source image size
-    padding_ratio = 0.05
+    padding_ratio = 0.0 # No padding
     target_source_size = int(size * (1 - 2 * padding_ratio))
     
     # Resize source image maintaining aspect ratio
@@ -87,7 +87,7 @@ def generate_android_icons(source_img):
         foreground_size = int(size * (108/48))
         foreground = Image.new('RGBA', (foreground_size, foreground_size), (0, 0, 0, 0))
         
-        fg_padding_ratio = 0.25 
+        fg_padding_ratio = 0.0 # No padding
         target_fg_size = int(foreground_size * (1 - 2 * fg_padding_ratio))
         
         # Resize source

@@ -13,8 +13,8 @@ class SummaryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Determine current year. You might want to allow changing this.
-    final currentYear = ref.watch(currentYearProvider);
-    final yearlyLogsAsync = ref.watch(yearlyAttendanceProvider);
+    final currentYear = ref.watch(summaryYearProvider);
+    final yearlyLogsAsync = ref.watch(yearlyAttendanceProvider(currentYear));
     final holidaysAsync = ref.watch(holidaysStreamProvider);
     final globalConfig = ref.watch(globalConfigProvider).value ?? {};
     final calculateAsWorking =
@@ -78,7 +78,7 @@ class SummaryScreen extends ConsumerWidget {
               ),
             ),
             onSelected: (int newValue) {
-              ref.read(currentYearProvider.notifier).update(newValue);
+              ref.read(summaryYearProvider.notifier).update(newValue);
             },
             itemBuilder: (context) => [
               for (int year = 2025; year <= DateTime.now().year; year++)
@@ -111,9 +111,9 @@ class SummaryScreen extends ConsumerWidget {
 
               return RefreshIndicator(
                 onRefresh: () async {
-                  ref.invalidate(yearlyAttendanceProvider);
+                  ref.invalidate(yearlyAttendanceProvider(currentYear));
                   ref.invalidate(holidaysStreamProvider);
-                  await ref.read(yearlyAttendanceProvider.future);
+                  await ref.read(yearlyAttendanceProvider(currentYear).future);
                   await ref.read(holidaysStreamProvider.future);
                 },
                 child: SingleChildScrollView(
@@ -539,7 +539,7 @@ class SummaryScreen extends ConsumerWidget {
     WidgetRef ref,
     List<MonthlyStats> data,
   ) {
-    final currentYear = ref.watch(currentYearProvider);
+    final currentYear = ref.watch(summaryYearProvider);
     final now = DateTime.now();
 
     return Container(
@@ -726,7 +726,7 @@ class SummaryScreen extends ConsumerWidget {
 
               // Simple logic for checking future
               bool isFuture = DateTime(
-                ref.read(currentYearProvider),
+                ref.read(summaryYearProvider),
                 item.month,
                 1,
               ).isAfter(DateTime.now());

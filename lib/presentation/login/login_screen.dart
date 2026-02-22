@@ -95,14 +95,9 @@ class LoginScreen extends ConsumerWidget {
                           }
                         } catch (e) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Signin Error, Please try again.',
-                                ),
-                                backgroundColor: Colors.red,
-                                duration: Duration(seconds: 5),
-                              ),
+                            AppTheme.showErrorSnackBar(
+                              context,
+                              'Signin Error, Please try again.',
                             );
                           }
                         }
