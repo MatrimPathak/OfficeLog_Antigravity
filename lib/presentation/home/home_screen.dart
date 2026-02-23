@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -174,7 +174,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   color: Theme.of(context).scaffoldBackgroundColor,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       offset: const Offset(0, -4),
                       blurRadius: 8,
                     ),
@@ -339,7 +339,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           color: Theme.of(context).colorScheme.onSurface,
         ),
         weekendTextStyle: TextStyle(
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
         ),
         // Decorations handled by builders to avoid tween errors
         markerDecoration: const BoxDecoration(color: Colors.transparent),
@@ -453,7 +453,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.greenAccent.withOpacity(0.5),
+                          color: Colors.greenAccent.withValues(alpha: 0.5),
                           blurRadius: 4,
                           spreadRadius: 1,
                         ),
@@ -540,9 +540,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Expanded(
               child: _buildStatCard(
                 context,
-                'Remaining',
-                '${stats.pending}',
-                Colors.orangeAccent,
+                stats.excess > 0 ? 'Excess' : 'Remaining',
+                stats.excess > 0 ? '${stats.excess}' : '${stats.pending}',
+                stats.excess > 0 ? Colors.greenAccent : Colors.orangeAccent,
                 null,
               ),
             ),
@@ -709,7 +709,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Text(
             'Cannot log future attendance',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.54),
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -734,7 +734,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Text(
             'Cannot log on Weekends',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.54),
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -759,7 +759,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Text(
             'Cannot log on Holidays',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.54),
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.54),
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -786,7 +786,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 (isDayLogged
                         ? AppTheme.deleteGradientStart
                         : AppTheme.logGradientStart)
-                    .withOpacity(0.3),
+                    .withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1005,6 +1005,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       'Shortfall Alert: ${stats.totalShortfall} ${stats.totalShortfall == 1 ? 'day' : 'days'} pending',
                       style: const TextStyle(
                         color: AppTheme.dangerColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (stats.totalExcess > 0) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.greenAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.greenAccent.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.greenAccent,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Excess Alert: ${stats.totalExcess} ${stats.totalExcess == 1 ? 'day' : 'days'} extra',
+                      style: const TextStyle(
+                        color: Colors.greenAccent,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),

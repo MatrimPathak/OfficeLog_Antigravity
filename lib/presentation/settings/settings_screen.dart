@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+﻿import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,9 +6,22 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../providers/providers.dart';
 import '../admin/admin_screen.dart';
+import '../../services/admin_service.dart';
 import 'widgets/delete_account_dialog.dart';
 import 'widgets/feedback_dialog.dart';
 import '../../services/background_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+final isDeletingAccountProvider =
+    NotifierProvider<IsDeletingAccountNotifier, bool>(
+      IsDeletingAccountNotifier.new,
+    );
+
+class IsDeletingAccountNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void set(bool value) => state = value;
+}
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -67,10 +79,8 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  // Commented out as requested
-                  /*
                   Text(
-                    'Senior Product Designer\nProduct Department • ID: 4829',
+                    user?.email ?? '',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.grey[500],
@@ -78,7 +88,6 @@ class SettingsScreen extends ConsumerWidget {
                       height: 1.5,
                     ),
                   ),
-                  */
                 ],
               ),
             ),
@@ -105,7 +114,7 @@ class SettingsScreen extends ConsumerWidget {
                           .read(themeModeProvider.notifier)
                           .update(val ? ThemeMode.dark : ThemeMode.light);
                     },
-                    activeColor: AppTheme.purpleAccent,
+                    activeThumbColor: AppTheme.purpleAccent,
                   ),
                 ),
                 _buildDivider(context),
@@ -125,7 +134,7 @@ class SettingsScreen extends ConsumerWidget {
                           .read(notificationEnabledProvider.notifier)
                           .toggle(val);
                     },
-                    activeColor: AppTheme.dangerColor,
+                    activeThumbColor: AppTheme.dangerColor,
                   ),
                   onTap: () async {
                     final TimeOfDay? time = await showTimePicker(
@@ -153,8 +162,25 @@ class SettingsScreen extends ConsumerWidget {
                   icon: Icons.location_on,
                   iconColor: AppTheme.warningColor,
                   title: 'Auto Check-in',
-                  value: 'Configure',
-                  onTap: () => _checkLocationPermission(context),
+                  value: ref
+                      .watch(locationPermissionProvider)
+                      .when(
+                        data: (status) {
+                          if (status == LocationPermission.always) {
+                            return 'Enabled';
+                          }
+                          if (status == LocationPermission.whileInUse) {
+                            return 'Needs "Always"';
+                          }
+                          return 'Disabled';
+                        },
+                        loading: () => 'Checking...',
+                        error: (_, __) => 'Error',
+                      ),
+                  onTap: () async {
+                    await _checkLocationPermission(context);
+                    ref.invalidate(locationPermissionProvider);
+                  },
                 ),
                 _buildDivider(context),
                 _buildSettingsTile(
@@ -162,7 +188,13 @@ class SettingsScreen extends ConsumerWidget {
                   icon: Icons.battery_alert,
                   iconColor: Colors.orangeAccent,
                   title: 'Battery Optimization',
-                  value: 'Ignore',
+                  value: ref
+                      .watch(batteryOptimizationProvider)
+                      .when(
+                        data: (isIgnored) => isIgnored ? 'Ignored' : 'Active',
+                        loading: () => 'Checking...',
+                        error: (_, __) => 'Error',
+                      ),
                   onTap: () async {
                     final status = await Permission.ignoreBatteryOptimizations
                         .request();
@@ -188,6 +220,7 @@ class SettingsScreen extends ConsumerWidget {
                           'Status: ${status.name}',
                         );
                       }
+                      ref.invalidate(batteryOptimizationProvider);
                     }
                   },
                 ),
@@ -210,7 +243,7 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
 
-            if (user?.email == 'matrimpathak1999@gmail.com') ...[
+            if (ref.watch(isAdminProvider)) ...[
               const SizedBox(height: 24),
               _buildSectionHeader('ADMIN'),
               _buildSettingsGroup(
@@ -263,19 +296,34 @@ class SettingsScreen extends ConsumerWidget {
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.05),
+                color: Colors.red.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.red.withOpacity(0.2)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
               ),
               child: TextButton.icon(
-                onPressed: () => _showDeleteAccountDialog(context, ref),
-                icon: const Icon(
-                  Icons.delete_forever,
-                  color: AppTheme.dangerColor,
-                ),
-                label: const Text(
-                  'Delete Account',
-                  style: TextStyle(
+                onPressed: ref.watch(isDeletingAccountProvider)
+                    ? null
+                    : () => _showDeleteAccountDialog(context, ref),
+                icon: ref.watch(isDeletingAccountProvider)
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppTheme.dangerColor,
+                          ),
+                        ),
+                      )
+                    : const Icon(
+                        Icons.delete_forever,
+                        color: AppTheme.dangerColor,
+                      ),
+                label: Text(
+                  ref.watch(isDeletingAccountProvider)
+                      ? 'Deleting...'
+                      : 'Delete Account',
+                  style: const TextStyle(
                     color: AppTheme.dangerColor,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -287,22 +335,33 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 24),
-            FutureBuilder<PackageInfo>(
-              future: PackageInfo.fromPlatform(),
-              builder: (context, snapshot) {
-                final version = snapshot.data?.version ?? '...';
-                final build = snapshot.data?.buildNumber ?? '...';
-                return Text(
-                  'VERSION $version (BUILD $build)',
-                  style: TextStyle(
-                    color: Colors.grey[700],
-                    fontSize: 10,
-                    letterSpacing: 1.5,
-                    fontWeight: FontWeight.bold,
+            ref
+                .watch(packageInfoProvider)
+                .when(
+                  data: (info) {
+                    final version = info.version;
+                    final build = info.buildNumber;
+                    return Text(
+                      'VERSION $version (BUILD $build)',
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 10,
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    );
+                  },
+                  loading: () => const Text(
+                    'VERSION ... (BUILD ...)',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 10,
+                      letterSpacing: 1.5,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                );
-              },
-            ),
+                  error: (_, __) => const SizedBox(),
+                ),
             const SizedBox(height: 24),
           ],
         ),
@@ -352,7 +411,7 @@ class SettingsScreen extends ConsumerWidget {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: iconColor.withOpacity(0.2),
+          color: iconColor.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: iconColor, size: 20),
@@ -448,23 +507,29 @@ class SettingsScreen extends ConsumerWidget {
     if (confirmed == true) {
       if (!context.mounted) return;
 
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
-      );
+      ref.read(isDeletingAccountProvider.notifier).set(true);
 
       try {
         await ref.read(authServiceProvider).deleteUserAccount();
         if (context.mounted) {
-          Navigator.pop(context); // Remove loading indicator
+          ref.read(isDeletingAccountProvider.notifier).set(false);
           Navigator.popUntil(context, (route) => route.isFirst);
         }
       } catch (e) {
         if (context.mounted) {
-          Navigator.pop(context); // Remove loading indicator
-          AppTheme.showErrorSnackBar(context, 'Error: $e');
+          ref.read(isDeletingAccountProvider.notifier).set(false);
+
+          if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+            AppTheme.showErrorSnackBar(
+              context,
+              'Security Check: You need to log out and log back in to delete your account.',
+            );
+          } else {
+            AppTheme.showErrorSnackBar(
+              context,
+              'Failed to delete account. Please try again later.',
+            );
+          }
         }
       }
     }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +7,26 @@ import '../../services/attendance_service.dart';
 import '../../data/models/user_profile.dart'; // Add this import
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/notification_service.dart';
+
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
+
+// App Info
+final packageInfoProvider = FutureProvider<PackageInfo>((ref) async {
+  return await PackageInfo.fromPlatform();
+});
+
+// Permissions / Device Settings
+final locationPermissionProvider = FutureProvider<LocationPermission>((
+  ref,
+) async {
+  return await Geolocator.checkPermission();
+});
+
+final batteryOptimizationProvider = FutureProvider<bool>((ref) async {
+  return await Permission.ignoreBatteryOptimizations.isGranted;
+});
 
 // Auth Providers
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
@@ -87,6 +108,8 @@ final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(
 );
 
 class ThemeModeNotifier extends Notifier<ThemeMode> {
+  Timer? _debounce;
+
   @override
   ThemeMode build() {
     final prefs = ref.watch(sharedPreferencesProvider);
@@ -100,17 +123,20 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setInt('theme_mode', mode.index);
 
-    final user = ref.read(currentUserProvider);
-    if (user != null) {
-      await ref.read(authServiceProvider).updateUserSettings(user.uid, {
-        'theme_mode': mode.index,
-        'notifications_enabled': ref.read(
-          notificationEnabledProvider,
-        ), // Sync all
-        'notification_hour': ref.read(notificationTimeProvider).hour,
-        'notification_minute': ref.read(notificationTimeProvider).minute,
-      });
-    }
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 2), () async {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        await ref.read(authServiceProvider).updateUserSettings(user.uid, {
+          'theme_mode': mode.index,
+          'notifications_enabled': ref.read(
+            notificationEnabledProvider,
+          ), // Sync all
+          'notification_hour': ref.read(notificationTimeProvider).hour,
+          'notification_minute': ref.read(notificationTimeProvider).minute,
+        });
+      }
+    });
   }
 }
 
@@ -120,6 +146,8 @@ final notificationEnabledProvider =
     );
 
 class NotificationEnabledNotifier extends Notifier<bool> {
+  Timer? _debounce;
+
   @override
   bool build() {
     final prefs = ref.watch(sharedPreferencesProvider);
@@ -131,27 +159,6 @@ class NotificationEnabledNotifier extends Notifier<bool> {
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setBool('notifications_enabled', value);
 
-    final user = ref.read(currentUserProvider);
-    if (user != null) {
-      // Get other settings to keep them in sync/don't overwrite with null if we were doing a merge,
-      // but here we are key-value pairing so it's fine.
-      // However, to be safe and clean, let's update just this key or all.
-      // Firestore update with dot notation for nested fields is 'settings.notifications_enabled'
-      // But our updateUserSettings takes a Map and replaces 'settings' field or updates it?
-      // AuthService.updateUserSettings uses .update({'settings': settings}), which REPLACES the map.
-      // We should probably change AuthService to use SetOptions(merge: true) or update specific fields.
-      // OR, we just explicitly send all current local settings.
-      final themeIndex = ref.read(themeModeProvider).index;
-      final time = ref.read(notificationTimeProvider);
-
-      await ref.read(authServiceProvider).updateUserSettings(user.uid, {
-        'notifications_enabled': value,
-        'theme_mode': themeIndex,
-        'notification_hour': time.hour,
-        'notification_minute': time.minute,
-      });
-    }
-
     if (value) {
       await NotificationService.requestPermissions();
       final time = ref.read(notificationTimeProvider);
@@ -159,6 +166,22 @@ class NotificationEnabledNotifier extends Notifier<bool> {
     } else {
       await NotificationService.cancelAllNotifications();
     }
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 2), () async {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        final themeIndex = ref.read(themeModeProvider).index;
+        final time = ref.read(notificationTimeProvider);
+
+        await ref.read(authServiceProvider).updateUserSettings(user.uid, {
+          'notifications_enabled': value,
+          'theme_mode': themeIndex,
+          'notification_hour': time.hour,
+          'notification_minute': time.minute,
+        });
+      }
+    });
   }
 }
 
@@ -168,13 +191,11 @@ final notificationTimeProvider =
     );
 
 class NotificationTimeNotifier extends Notifier<TimeOfDay> {
+  Timer? _debounce;
+
   @override
   TimeOfDay build() {
     final prefs = ref.watch(sharedPreferencesProvider);
-    // TODO: Ideally we should check if UserProfile has settings and use them if local prefs are missing?
-    // But currently we rely on local prefs as source of truth for UI, and sync to remote.
-    // To support "Remote > Local" sync (e.g. fresh install), we would need a listener on UserProfile.
-    // For now, adhering to "Make all settings persistent like save it to the database".
     final hour = prefs.getInt('notification_hour') ?? 9;
     final minute = prefs.getInt('notification_minute') ?? 0;
     return TimeOfDay(hour: hour, minute: minute);
@@ -186,22 +207,25 @@ class NotificationTimeNotifier extends Notifier<TimeOfDay> {
     await prefs.setInt('notification_hour', time.hour);
     await prefs.setInt('notification_minute', time.minute);
 
-    final user = ref.read(currentUserProvider);
-    if (user != null) {
-      final themeIndex = ref.read(themeModeProvider).index;
-      final enabled = ref.read(notificationEnabledProvider);
-
-      await ref.read(authServiceProvider).updateUserSettings(user.uid, {
-        'notification_hour': time.hour,
-        'notification_minute': time.minute,
-        'notifications_enabled': enabled,
-        'theme_mode': themeIndex,
-      });
-    }
-
     if (ref.read(notificationEnabledProvider)) {
       await NotificationService.cancelAllNotifications();
       await NotificationService.scheduleDailyNotification(time);
     }
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 2), () async {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        final themeIndex = ref.read(themeModeProvider).index;
+        final enabled = ref.read(notificationEnabledProvider);
+
+        await ref.read(authServiceProvider).updateUserSettings(user.uid, {
+          'notification_hour': time.hour,
+          'notification_minute': time.minute,
+          'notifications_enabled': enabled,
+          'theme_mode': themeIndex,
+        });
+      }
+    });
   }
 }

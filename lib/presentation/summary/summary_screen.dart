@@ -1,4 +1,4 @@
-import 'package:fl_chart/fl_chart.dart';
+﻿import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
@@ -122,9 +122,11 @@ class SummaryScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Current Month Card
-                      _buildCurrentMonthCard(context, stats, currentYear),
-                      const SizedBox(height: 24),
+                      if (currentYear == DateTime.now().year) ...[
+                        // Current Month Card
+                        _buildCurrentMonthCard(context, stats, currentYear),
+                        const SizedBox(height: 24),
+                      ],
 
                       // Overall Highlights (YTD)
                       const Text(
@@ -279,7 +281,7 @@ class SummaryScreen extends ConsumerWidget {
                   decoration: BoxDecoration(
                     color: Theme.of(context).brightness == Brightness.dark
                         ? const Color(0xFF1A2C42)
-                        : AppTheme.primaryColor.withOpacity(0.1),
+                        : AppTheme.primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -350,10 +352,10 @@ class SummaryScreen extends ConsumerWidget {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: AppTheme.dangerColor.withOpacity(0.1),
+                  color: AppTheme.dangerColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: AppTheme.dangerColor.withOpacity(0.2),
+                    color: AppTheme.dangerColor.withValues(alpha: 0.2),
                   ),
                 ),
                 child: Row(
@@ -368,6 +370,39 @@ class SummaryScreen extends ConsumerWidget {
                       'Yearly Shortfall: ${stats.totalShortfall} ${stats.totalShortfall == 1 ? "day" : "days"}',
                       style: const TextStyle(
                         color: AppTheme.dangerColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (stats.totalExcess > 0) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.greenAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.greenAccent.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle_outline,
+                      color: Colors.greenAccent,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Yearly Excess: ${stats.totalExcess} ${stats.totalExcess == 1 ? "day" : "days"} extra',
+                      style: const TextStyle(
+                        color: Colors.greenAccent,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
@@ -602,13 +637,13 @@ class SummaryScreen extends ConsumerWidget {
 
             Color barColor;
             if (isFuture) {
-              barColor = Colors.grey.withOpacity(0.5);
+              barColor = Colors.grey.withValues(alpha: 0.5);
             } else if (m.requiredDays > 0 && m.presentDays >= m.requiredDays) {
               barColor = AppTheme.primaryColor; // Green/Blue success color
             } else if (m.requiredDays > 0) {
               barColor = Colors.orangeAccent;
             } else {
-              barColor = Colors.grey.withOpacity(0.5);
+              barColor = Colors.grey.withValues(alpha: 0.5);
             }
 
             return BarChartGroupData(
@@ -743,7 +778,7 @@ class SummaryScreen extends ConsumerWidget {
               } else {
                 // Future or no required days
                 statusIcon = Icons.access_time_filled;
-                statusColor = Colors.grey.withOpacity(0.5);
+                statusColor = Colors.grey.withValues(alpha: 0.5);
               }
 
               return Padding(

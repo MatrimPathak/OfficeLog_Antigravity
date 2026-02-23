@@ -1,8 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/admin_service.dart';
+import '../../data/models/holiday.dart';
+import '../providers/providers.dart';
 import 'widgets/add_holiday_dialog.dart';
 import 'widgets/add_office_location_dialog.dart';
 
@@ -20,7 +22,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -45,9 +47,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
           labelColor: Theme.of(context).colorScheme.onSurface,
           unselectedLabelColor: Theme.of(
             context,
-          ).colorScheme.onSurface.withOpacity(0.6),
+          ).colorScheme.onSurface.withValues(alpha: 0.6),
           indicatorColor: AppTheme.primaryColor,
           tabs: const [
+            Tab(text: 'Users'),
             Tab(text: 'Holidays'),
             Tab(text: 'Locations'),
             Tab(text: 'Settings'),
@@ -56,7 +59,12 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
       ),
       body: TabBarView(
         controller: _tabController,
-        children: const [HolidaysTab(), LocationsTab(), GlobalSettingsTab()],
+        children: const [
+          UsersTab(),
+          HolidaysTab(),
+          LocationsTab(),
+          GlobalSettingsTab(),
+        ],
       ),
     );
   }
@@ -67,42 +75,24 @@ class HolidaysTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final holidaysAsync = ref.watch(adminServiceProvider).getHolidaysStream();
+    final holidaysAsync = ref.watch(sortedHolidaysProvider);
 
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: holidaysAsync,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator.adaptive());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-
-        final holidays = List<Map<String, dynamic>>.from(snapshot.data ?? []);
-        holidays.sort((a, b) {
-          final dateA = (a['date'] as dynamic).toDate() as DateTime;
-          final dateB = (b['date'] as dynamic).toDate() as DateTime;
-          return dateA.compareTo(dateB); // Accending order
-        });
-
+    return holidaysAsync.when(
+      data: (holidays) {
         return Stack(
           children: [
             ListView.builder(
               itemCount: holidays.length,
               itemBuilder: (context, index) {
                 final holiday = holidays[index];
-                final date = (holiday['date'] as dynamic).toDate();
+                final date = holiday.date;
 
-                final List<String>? officeLocs =
-                    (holiday['officeLocations'] as List<dynamic>?)
-                        ?.cast<String>();
-                final String officeLocString =
-                    officeLocs != null && officeLocs.isNotEmpty
+                final List<String> officeLocs = holiday.officeLocations;
+                final String officeLocString = officeLocs.isNotEmpty
                     ? officeLocs.join(', ')
-                    : holiday['officeLocation'] ?? 'All Offices';
+                    : 'All Offices';
 
-                final bool isRecurring = holiday['isRecurring'] ?? false;
+                final bool isRecurring = holiday.isRecurring;
 
                 return Container(
                   margin: const EdgeInsets.symmetric(
@@ -118,7 +108,7 @@ class HolidaysTab extends ConsumerWidget {
                     onTap: () => _showAddHolidayDialog(context, ref, holiday),
                     isThreeLine: true,
                     title: Text(
-                      holiday['name'],
+                      holiday.name,
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
@@ -131,7 +121,7 @@ class HolidaysTab extends ConsumerWidget {
                           style: TextStyle(
                             color: Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
+                            ).colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                         ),
                         Text(
@@ -141,7 +131,7 @@ class HolidaysTab extends ConsumerWidget {
                           style: TextStyle(
                             color: Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.8),
+                            ).colorScheme.onSurface.withValues(alpha: 0.8),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -155,7 +145,7 @@ class HolidaysTab extends ConsumerWidget {
                       onPressed: () {
                         ref
                             .read(adminServiceProvider)
-                            .deleteHoliday(holiday['id']);
+                            .deleteHoliday(holiday.id);
                       },
                     ),
                   ),
@@ -173,13 +163,15 @@ class HolidaysTab extends ConsumerWidget {
           ],
         );
       },
+      loading: () => const Center(child: CircularProgressIndicator.adaptive()),
+      error: (e, s) => Center(child: Text('Error: $e')),
     );
   }
 
   void _showAddHolidayDialog(
     BuildContext context,
     WidgetRef ref,
-    Map<String, dynamic>? holiday,
+    Holiday? holiday,
   ) async {
     showDialog(
       context: context,
@@ -225,7 +217,7 @@ class LocationsTab extends ConsumerWidget {
                       style: TextStyle(
                         color: Theme.of(
                           context,
-                        ).colorScheme.onSurface.withOpacity(0.6),
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                     isThreeLine: true,
@@ -295,7 +287,7 @@ class GlobalSettingsTab extends ConsumerWidget {
                   style: TextStyle(
                     color: Theme.of(
                       context,
-                    ).colorScheme.onSurface.withOpacity(0.6),
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
                 value: calculateAsWorking,
@@ -311,6 +303,80 @@ class GlobalSettingsTab extends ConsumerWidget {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, s) => Center(child: Text('Error: $e')),
+    );
+  }
+}
+
+class UsersTab extends ConsumerWidget {
+  const UsersTab({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final usersAsync = ref.watch(usersStreamProvider);
+    final currentUserAsync = ref.watch(userProfileProvider);
+    final currentUserId = currentUserAsync.value?.id;
+
+    return usersAsync.when(
+      data: (users) {
+        return ListView.builder(
+          itemCount: users.length,
+          itemBuilder: (context, index) {
+            final user = users[index];
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardTheme.color,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Theme.of(context).dividerColor),
+              ),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppTheme.primaryColor,
+                  backgroundImage: user.photoUrl != null
+                      ? NetworkImage(user.photoUrl!)
+                      : null,
+                  child: user.photoUrl == null
+                      ? Text(
+                          user.displayName?.isNotEmpty == true
+                              ? user.displayName![0].toUpperCase()
+                              : 'U',
+                          style: const TextStyle(color: Colors.white),
+                        )
+                      : null,
+                ),
+                title: Text(
+                  user.displayName ?? 'Unknown User',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: Text(
+                  user.email,
+                  style: TextStyle(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                trailing: Switch(
+                  value: user.isAdmin,
+                  onChanged: user.id == currentUserId
+                      ? null
+                      : (val) {
+                          ref
+                              .read(adminServiceProvider)
+                              .updateUserRole(user.id, val);
+                        },
+                  activeThumbColor: AppTheme.primaryColor,
+                ),
+              ),
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator.adaptive()),
       error: (e, s) => Center(child: Text('Error: $e')),
     );
   }

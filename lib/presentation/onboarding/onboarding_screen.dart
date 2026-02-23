@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -196,7 +196,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                         color: isSelected
                                             ? const Color(
                                                 0xFF2E88F6,
-                                              ).withOpacity(0.2)
+                                              ).withValues(alpha: 0.2)
                                             : Colors.grey[800],
                                         shape: BoxShape.circle,
                                       ),
@@ -262,8 +262,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     gradient: (_isLoading || _selectedLocation == null)
                         ? LinearGradient(
                             colors: [
-                              AppTheme.primaryColor.withOpacity(0.5),
-                              AppTheme.primaryColor.withOpacity(0.3),
+                              AppTheme.primaryColor.withValues(alpha: 0.5),
+                              AppTheme.primaryColor.withValues(alpha: 0.3),
                             ],
                           )
                         : LinearGradient(
@@ -281,7 +281,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                             BoxShadow(
                               color: Theme.of(
                                 context,
-                              ).primaryColor.withOpacity(0.3),
+                              ).primaryColor.withValues(alpha: 0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -311,7 +311,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                 style: TextStyle(
                                   color:
                                       (_isLoading || _selectedLocation == null)
-                                      ? Colors.white.withOpacity(0.5)
+                                      ? Colors.white.withValues(alpha: 0.5)
                                       : Colors.white,
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,

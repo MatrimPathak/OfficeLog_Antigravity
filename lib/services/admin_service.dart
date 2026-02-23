@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/office_location.dart';
+import '../data/models/user_profile.dart'; // Added UserProfile import
+import '../data/models/holiday.dart'; // Added Holiday import
 import '../presentation/providers/providers.dart';
 
 class AdminService {
@@ -14,27 +16,16 @@ class AdminService {
     List<String>? officeLocations,
     bool isRecurring = false,
   ]) async {
-    // For backwards compatibility and logical simplicity, if they select nothing we default to 'All Offices'
-    final List<String> finalLocations =
-        (officeLocations == null || officeLocations.isEmpty)
-        ? ['All Offices']
-        : officeLocations;
+    final docRef = _firestore.collection('holidays').doc();
+    final holiday = Holiday(
+      id: docRef.id,
+      date: date,
+      name: name,
+      officeLocations: officeLocations ?? [],
+      isRecurring: isRecurring,
+    );
 
-    // Sort to ensure consistent ID regardless of selection order
-    final sortedLocations = List<String>.from(finalLocations)..sort();
-    final locationSuffix = sortedLocations.contains('All Offices')
-        ? ''
-        : '_${sortedLocations.join("_").replaceAll(" ", "")}';
-
-    final id =
-        '${date.year}_${date.month}_${date.day}_${name.replaceAll(" ", "_")}$locationSuffix';
-
-    await _firestore.collection('holidays').doc(id).set({
-      'date': Timestamp.fromDate(date),
-      'name': name,
-      'officeLocations': finalLocations,
-      'isRecurring': isRecurring,
-    });
+    await docRef.set(holiday.toMap());
   }
 
   Future<void> updateHoliday(
@@ -54,12 +45,12 @@ class AdminService {
     await _firestore.collection('holidays').doc(id).delete();
   }
 
-  Stream<List<Map<String, dynamic>>> getHolidaysStream() {
-    return _firestore.collection('holidays').snapshots().map((snapshot) {
+  Stream<List<Holiday>> getHolidaysStream() {
+    return _firestore.collection('holidays').orderBy('date').snapshots().map((
+      snapshot,
+    ) {
       return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data; // {id, date: Timestamp, name: String}
+        return Holiday.fromMap(doc.data(), doc.id);
       }).toList();
     });
   }
@@ -103,59 +94,74 @@ class AdminService {
         .doc('global')
         .set(config, SetOptions(merge: true));
   }
+
+  // --- Users ---
+
+  Stream<List<UserProfile>> getUsersStream() {
+    return _firestore.collection('users').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return UserProfile.fromMap(doc.data());
+      }).toList();
+    });
+  }
+
+  Future<void> updateUserRole(String uid, bool isAdmin) async {
+    await _firestore.collection('users').doc(uid).update({'isAdmin': isAdmin});
+  }
 }
 
 final adminServiceProvider = Provider<AdminService>((ref) => AdminService());
+
+final sortedHolidaysProvider = StreamProvider<List<Holiday>>((ref) {
+  return ref.watch(adminServiceProvider).getHolidaysStream().map((holidays) {
+    holidays.sort((a, b) {
+      return a.date.compareTo(b.date);
+    });
+    return holidays;
+  });
+});
+
+final usersStreamProvider = StreamProvider<List<UserProfile>>((ref) {
+  return ref.watch(adminServiceProvider).getUsersStream();
+});
 
 final holidaysStreamProvider = StreamProvider<List<DateTime>>((ref) {
   final adminService = ref.watch(adminServiceProvider);
   final userProfileAsync = ref.watch(userProfileProvider);
 
   return adminService.getHolidaysStream().map((list) {
-    // If we haven't loaded the user profile yet, or user has no office,
-    // we still return "All Offices" and legacy holidays.
     final userOffice = userProfileAsync.value?.officeLocation;
 
     return list
-        .where((item) {
-          final legacyHolidayOffice = item['officeLocation'] as String?;
-          final holidayOffices = (item['officeLocations'] as List<dynamic>?)
-              ?.cast<String>();
+        .where((holiday) {
+          final offices = holiday.officeLocations;
 
-          // Condition 1: Legacy 'All Offices' or new array containing 'All Offices'
-          if (legacyHolidayOffice == 'All Offices' ||
-              (holidayOffices?.contains('All Offices') ?? false) ||
-              (legacyHolidayOffice == null && holidayOffices == null)) {
+          if (offices.isEmpty || offices.contains('All Offices')) {
             return true;
           }
 
-          // Condition 2: Target is specific to the user's office
-          if (userOffice != null) {
-            if (holidayOffices != null && holidayOffices.contains(userOffice)) {
-              return true;
-            }
-            if (legacyHolidayOffice != null &&
-                legacyHolidayOffice == userOffice) {
-              return true;
-            }
+          if (userOffice != null && offices.contains(userOffice)) {
+            return true;
           }
 
           return false;
         })
-        .expand<DateTime>((item) {
-          final date = (item['date'] as Timestamp).toDate();
-          final isRecurring = item['isRecurring'] as bool? ?? false;
+        .expand<DateTime>((holiday) {
+          final date = holiday.date;
+          final isRecurring = holiday.isRecurring;
 
           if (!isRecurring) {
             return [date];
           }
 
-          // If recurring, generate dates for 100 years out starting from 2000
-          // (or whichever bounds you prefer). Let's do 2000 to 2100.
-          return List.generate(
-            101, // 2000 to 2100 inclusive
-            (index) => DateTime(2000 + index, date.month, date.day),
-          );
+          // If recurring, generate dates for current year and next year
+          final currentYear = DateTime.now().year;
+          return [
+            DateTime(currentYear - 1, date.month, date.day),
+            DateTime(currentYear, date.month, date.day),
+            DateTime(currentYear + 1, date.month, date.day),
+            DateTime(currentYear + 2, date.month, date.day),
+          ];
         })
         .toList();
   });
@@ -169,4 +175,8 @@ final officeLocationsProvider = StreamProvider<List<OfficeLocation>>((ref) {
 final globalConfigProvider = StreamProvider<Map<String, dynamic>>((ref) {
   final adminService = ref.watch(adminServiceProvider);
   return adminService.getGlobalConfigStream();
+});
+
+final isAdminProvider = Provider<bool>((ref) {
+  return ref.watch(userProfileProvider).value?.isAdmin ?? false;
 });

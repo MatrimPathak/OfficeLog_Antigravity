@@ -132,6 +132,9 @@ class StatsCalculator {
     totalPending = totalRequired - totalLogged;
     if (totalPending < 0) totalPending = 0;
 
+    int totalExcess = totalLogged - totalRequired;
+    if (totalExcess < 0) totalExcess = 0;
+
     // Calculate total business days directly in the range
     int totalBusinessDays = 0;
     DateTime loopDay = start;
@@ -150,6 +153,7 @@ class StatsCalculator {
       required: totalRequired,
       logged: totalLogged,
       pending: totalPending,
+      excess: totalExcess,
       businessDays: totalBusinessDays,
       holidayCount: holidayCount,
     );
@@ -160,6 +164,7 @@ class StatsResult {
   final int required;
   final int logged;
   final int pending;
+  final int excess;
   final int businessDays;
   final int holidayCount;
 
@@ -167,6 +172,7 @@ class StatsResult {
     required this.required,
     required this.logged,
     required this.pending,
+    required this.excess,
     required this.businessDays,
     required this.holidayCount,
   });
@@ -182,6 +188,11 @@ class YearlyStatsResult {
   final double bestMonthPercentage;
   final List<MonthlyStats> monthlyBreakdown;
   final Map<int, double> quarterlyPerformance; // 1-4 : percentage
+
+  int get totalExcess {
+    int excess = ytdPresent - ytdRequired;
+    return excess < 0 ? 0 : excess;
+  }
 
   int get totalShortfall {
     final now = DateTime.now();
