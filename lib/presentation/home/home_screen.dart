@@ -612,7 +612,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isLogged = logs.any((log) => isSameDay(log.date, today));
 
     String title = 'Today is ${DateFormat('MMMM d').format(now)}';
-    String message = 'Don\'t forget to log your attendance before 10:00 AM.';
+    String message = 'Don\'t forget to log your attendance.';
     IconData icon = Icons.info_outline;
     Color iconBgColor = Colors.blueAccent;
 
@@ -632,11 +632,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       icon = Icons.check_circle_outline;
       iconBgColor = Colors.greenAccent;
     } else {
-      final tenAM = DateTime(now.year, now.month, now.day, 10, 0);
-      if (now.isAfter(tenAM)) {
+      final sixPM = DateTime(now.year, now.month, now.day, 18, 0);
+      if (now.isAfter(sixPM)) {
         title = 'Late Log Alert';
         message =
-            'It\'s past 10:00 AM. Please log your attendance as soon as possible.';
+            'It\'s past 6:00 PM. Please log your attendance as soon as possible.';
         icon = Icons.warning_amber_rounded;
         iconBgColor = Colors.redAccent;
       }
