@@ -344,7 +344,10 @@ class SummaryScreen extends ConsumerWidget {
                 minHeight: 8,
               ),
             ),
-            if (stats.totalShortfall > 0) ...[
+            if (stats.gettotalShortfallUpTo(
+                  currentYear < DateTime.now().year ? 12 : DateTime.now().month,
+                ) >
+                0) ...[
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -367,7 +370,7 @@ class SummaryScreen extends ConsumerWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Yearly Shortfall: ${stats.totalShortfall} ${stats.totalShortfall == 1 ? "day" : "days"}',
+                      'Yearly Shortfall: ${stats.gettotalShortfallUpTo(currentYear < DateTime.now().year ? 12 : DateTime.now().month)} ${stats.gettotalShortfallUpTo(currentYear < DateTime.now().year ? 12 : DateTime.now().month) == 1 ? "day" : "days"}',
                       style: const TextStyle(
                         color: AppTheme.dangerColor,
                         fontWeight: FontWeight.bold,
@@ -377,7 +380,10 @@ class SummaryScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-            ] else if (stats.totalExcess > 0) ...[
+            ] else if (stats.gettotalExcessUpTo(
+                  currentYear < DateTime.now().year ? 12 : DateTime.now().month,
+                ) >
+                0) ...[
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -400,7 +406,7 @@ class SummaryScreen extends ConsumerWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Yearly Excess: ${stats.totalExcess} ${stats.totalExcess == 1 ? "day" : "days"} extra',
+                      'Yearly Excess: ${stats.gettotalExcessUpTo(currentYear < DateTime.now().year ? 12 : DateTime.now().month)} ${stats.gettotalExcessUpTo(currentYear < DateTime.now().year ? 12 : DateTime.now().month) == 1 ? "day" : "days"} extra',
                       style: const TextStyle(
                         color: Colors.greenAccent,
                         fontWeight: FontWeight.bold,

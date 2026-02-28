@@ -35,7 +35,8 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
     try {
       await FeedbackService().submitFeedback(
         userId: user.uid,
-        userEmail: user.email ?? '',
+        userName: user.displayName ?? 'Anonymous',
+        userEmail: user.email ?? 'No email',
         rating: _rating,
         message: _messageController.text.trim(),
       );

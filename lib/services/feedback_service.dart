@@ -5,12 +5,14 @@ class FeedbackService {
 
   Future<void> submitFeedback({
     required String userId,
+    required String userName,
     required String userEmail,
     required int rating,
     required String message,
   }) async {
     await _firestore.collection('feedback').add({
       'userId': userId,
+      'userName': userName,
       'userEmail': userEmail,
       'rating': rating,
       'message': message,

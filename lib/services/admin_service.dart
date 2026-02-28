@@ -108,6 +108,26 @@ class AdminService {
   Future<void> updateUserRole(String uid, bool isAdmin) async {
     await _firestore.collection('users').doc(uid).update({'isAdmin': isAdmin});
   }
+
+  // --- Feedback ---
+
+  Stream<List<Map<String, dynamic>>> getFeedbackStream() {
+    return _firestore
+        .collection('feedback')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return data;
+          }).toList();
+        });
+  }
+
+  Future<void> deleteFeedback(String id) async {
+    await _firestore.collection('feedback').doc(id).delete();
+  }
 }
 
 final adminServiceProvider = Provider<AdminService>((ref) => AdminService());
@@ -179,4 +199,11 @@ final globalConfigProvider = StreamProvider<Map<String, dynamic>>((ref) {
 
 final isAdminProvider = Provider<bool>((ref) {
   return ref.watch(userProfileProvider).value?.isAdmin ?? false;
+});
+
+final feedbackStreamProvider = StreamProvider<List<Map<String, dynamic>>>((
+  ref,
+) {
+  final adminService = ref.watch(adminServiceProvider);
+  return adminService.getFeedbackStream();
 });

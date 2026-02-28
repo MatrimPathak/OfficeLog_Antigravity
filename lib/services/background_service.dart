@@ -65,8 +65,16 @@ void callbackDispatcher() {
 }
 
 class BackgroundService {
-  static Future<void> init() async {
+  static Future<void> init(ProviderContainer container) async {
     await Workmanager().initialize(callbackDispatcher);
+
+    // Initialize Geofencing
+    try {
+      await container.read(autoCheckInServiceProvider).initGeofence();
+    } catch (e) {
+      developer.log('BackgroundService: Failed to init geofence: $e');
+    }
+
     developer.log('BackgroundService: initialized');
   }
 
@@ -77,7 +85,7 @@ class BackgroundService {
       frequency: const Duration(minutes: 15),
       constraints: Constraints(networkType: NetworkType.connected),
       existingWorkPolicy: ExistingPeriodicWorkPolicy
-          .keep, // Prevent duplication, but ensure it's in the queue
+          .update, // Ensure settings are updated on registration
     );
     developer.log('BackgroundService: periodic task registered (keep policy)');
   }

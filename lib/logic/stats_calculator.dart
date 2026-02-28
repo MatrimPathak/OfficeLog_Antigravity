@@ -50,14 +50,14 @@ class StatsCalculator {
     int totalPending = 0;
     int holidayCount = 0;
 
-    // Filter logs within range
-    final rangeLogs = logs
-        .where(
-          (l) =>
-              l.date.isAfter(start.subtract(const Duration(seconds: 1))) &&
-              l.date.isBefore(end.add(const Duration(seconds: 1))),
-        )
-        .toList();
+    // Filter logs within range, stripping out the time component for accurate boundary checks
+    final startDate = DateTime(start.year, start.month, start.day);
+    final endDate = DateTime(end.year, end.month, end.day);
+
+    final rangeLogs = logs.where((l) {
+      final logDate = DateTime(l.date.year, l.date.month, l.date.day);
+      return !logDate.isBefore(startDate) && !logDate.isAfter(endDate);
+    }).toList();
     totalLogged = rangeLogs.length;
 
     // Iterate by weeks to calculate requirement
@@ -100,7 +100,9 @@ class StatsCalculator {
         DateTime day = currentWeekStart.add(Duration(days: i));
 
         // Check if day is within range [start, end]
-        bool inRange = !day.isBefore(start) && !day.isAfter(end);
+        final loopDate = DateTime(day.year, day.month, day.day);
+        bool inRange =
+            !loopDate.isBefore(startDate) && !loopDate.isAfter(endDate);
 
         if (inRange) {
           bool isHoliday = holidays.any((h) => isSameDay(h, day));
@@ -135,11 +137,12 @@ class StatsCalculator {
     int totalExcess = totalLogged - totalRequired;
     if (totalExcess < 0) totalExcess = 0;
 
-    // Calculate total business days directly in the range
     int totalBusinessDays = 0;
-    DateTime loopDay = start;
-    // Iterate day by day from start to end
-    while (!loopDay.isAfter(end)) {
+    DateTime loopDay =
+        startDate; // Using the normalized start date without time
+
+    // Iterate day by day from start to end (normalized)
+    while (!loopDay.isAfter(endDate)) {
       if (loopDay.weekday >= 1 && loopDay.weekday <= 5) {
         bool isHoliday = holidays.any((h) => isSameDay(h, loopDay));
         if (!isHoliday || calculateHolidayAsWorking) {
@@ -189,52 +192,56 @@ class YearlyStatsResult {
   final List<MonthlyStats> monthlyBreakdown;
   final Map<int, double> quarterlyPerformance; // 1-4 : percentage
 
-  int get totalExcess {
-    int excess = ytdPresent - ytdRequired;
+  int gettotalExcessUpTo(int targetMonth) {
+    int requestedPresent = 0;
+    int requestedRequired = 0;
+
+    for (var m in monthlyBreakdown) {
+      if (m.month <= targetMonth) {
+        requestedPresent += m.presentDays;
+        requestedRequired += m.requiredDays;
+      }
+    }
+
+    int excess = requestedPresent - requestedRequired;
     return excess < 0 ? 0 : excess;
   }
 
-  int get totalShortfall {
+  int gettotalShortfallUpTo(int targetMonth) {
     final now = DateTime.now();
 
     // If viewing a future year, no shortfall
     if (year > now.year) return 0;
 
-    // If viewing a past year, shortfall is the sum of all missed days for the whole year
-    if (year < now.year) {
-      return monthlyBreakdown
-          .where((m) => m.requiredDays > 0 && m.presentDays < m.requiredDays)
-          .fold(0, (sum, m) => sum + (m.requiredDays - m.presentDays));
-    }
-
-    // Current Year Logic:
+    // Current & Past Year Logic:
     // Base Shortfall = Sum of (Required - Present) for months < current, where Required > Present. (Strict past debt).
     // Current Month Status:
     // If CurrentPresent > CurrentRequired, then Surplus = CurrentPresent - CurrentRequired.
     // DisplayShortfall = Max(0, PastShortfall - Surplus).
 
+    // Calculate current month surplus (relative to the target Month cutoff)
+    // We only offset previous strict shortfall if the target month has surplus
+    int currentMonthSurplus = 0;
+    try {
+      final targetMonthStats = monthlyBreakdown.firstWhere(
+        (m) => m.month == targetMonth,
+      );
+      if (targetMonthStats.presentDays > targetMonthStats.requiredDays) {
+        currentMonthSurplus =
+            targetMonthStats.presentDays - targetMonthStats.requiredDays;
+      }
+    } catch (_) {
+      // Month might not be in breakdown
+    }
+
     int strictPastShortfall = monthlyBreakdown
         .where(
           (m) =>
-              m.month < now.month &&
+              m.month < targetMonth &&
               m.requiredDays > 0 &&
               m.presentDays < m.requiredDays,
         )
         .fold(0, (sum, m) => sum + (m.requiredDays - m.presentDays));
-
-    // Calculate current month surplus
-    int currentMonthSurplus = 0;
-    try {
-      final currentMonthStats = monthlyBreakdown.firstWhere(
-        (m) => m.month == now.month,
-      );
-      if (currentMonthStats.presentDays > currentMonthStats.requiredDays) {
-        currentMonthSurplus =
-            currentMonthStats.presentDays - currentMonthStats.requiredDays;
-      }
-    } catch (_) {
-      // Current month might not be in breakdown if logic changes, but it should be there.
-    }
 
     int netShortfall = strictPastShortfall - currentMonthSurplus;
     return netShortfall < 0 ? 0 : netShortfall;

@@ -13,7 +13,6 @@ import '../settings/settings_screen.dart';
 import '../summary/summary_screen.dart';
 
 import '../../services/auto_checkin_service.dart';
-import '../../services/notification_service.dart';
 
 import '../../services/admin_service.dart';
 import 'widgets/delete_attendance_dialog.dart';
@@ -34,8 +33,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     // Trigger auto check-in check
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(autoCheckInServiceProvider).checkAndLogAttendance();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(autoCheckInServiceProvider).initGeofence();
+      await ref.read(autoCheckInServiceProvider).checkAndLogAttendance();
     });
   }
 
@@ -44,10 +44,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final attendanceAsync = ref.watch(monthlyAttendanceProvider);
     final holidaysAsync = ref.watch(holidaysStreamProvider);
     final yearlyLogsAsync = ref.watch(
-      yearlyAttendanceProvider(DateTime.now().year),
+      yearlyAttendanceProvider(_focusedDay.year),
     );
     final user = ref.watch(currentUserProvider);
-    final currentYear = DateTime.now().year;
+    final currentYear = _focusedDay.year;
     final globalConfig = ref.watch(globalConfigProvider).value ?? {};
     final calculateAsWorking =
         globalConfig['calculateHolidayAsWorking'] ?? false;
@@ -73,124 +73,123 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         data: (logs) {
           final attendanceLogs = logs.cast<AttendanceLog>();
 
-          return Column(
-            children: [
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () async {
-                    ref.invalidate(monthlyAttendanceProvider);
-                    ref.invalidate(holidaysStreamProvider);
-                    await ref.read(monthlyAttendanceProvider.future);
-                    await ref.read(holidaysStreamProvider.future);
-                  },
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 16),
-                        // Calendar section (Top)
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              children: [
-                                holidaysAsync.when(
-                                  data: (holidays) =>
-                                      _buildCalendar(attendanceLogs, holidays),
-                                  loading: () =>
-                                      _buildCalendar(attendanceLogs, []),
-                                  error: (_, __) =>
-                                      _buildCalendar(attendanceLogs, []),
-                                ),
-                                const SizedBox(height: 16),
-                                Divider(color: Theme.of(context).dividerColor),
-                                const SizedBox(height: 16),
-                                // Legend
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                    _buildLegendItem(
-                                      context,
-                                      'HOLIDAY',
-                                      Colors.orangeAccent,
-                                    ),
-                                    _buildLegendItem(
-                                      context,
-                                      'ATTENDED',
-                                      Colors.greenAccent,
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(monthlyAttendanceProvider);
+              ref.invalidate(holidaysStreamProvider);
+              await ref.read(monthlyAttendanceProvider.future);
+              await ref.read(holidaysStreamProvider.future);
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+                  // Calendar section (Top)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          holidaysAsync.when(
+                            data: (holidays) =>
+                                _buildCalendar(attendanceLogs, holidays),
+                            loading: () => _buildCalendar(attendanceLogs, []),
+                            error: (_, __) =>
+                                _buildCalendar(attendanceLogs, []),
                           ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Stats Section
-                        _buildStatisticsGrid(
-                          attendanceLogs,
-                          holidaysAsync.value ?? [],
-                          calculateAsWorking,
-                          _focusedDay,
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Info Card
-                        yearlyLogsAsync.when(
-                          data: (yearlyLogs) {
-                            final stats = YearlyCalculator.calculateYearlyStats(
-                              year: currentYear,
-                              logs: yearlyLogs.cast<AttendanceLog>(),
-                              holidays: holidaysAsync.value ?? [],
-                              calculateHolidayAsWorking: calculateAsWorking,
-                            );
-                            return Column(
-                              children: [
-                                _buildProgressCard(context, stats),
-                                const SizedBox(height: 24),
-                                if (isSameDay(_selectedDay, DateTime.now()))
-                                  _buildInfoCard(
-                                    attendanceLogs,
-                                    holidaysAsync.value ?? [],
-                                  ),
-                              ],
-                            );
-                          },
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
-                        ),
-                      ],
+                          const SizedBox(height: 16),
+                          Divider(color: Theme.of(context).dividerColor),
+                          const SizedBox(height: 16),
+                          // Legend
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _buildLegendItem(
+                                context,
+                                'HOLIDAY',
+                                Colors.orangeAccent,
+                              ),
+                              _buildLegendItem(
+                                context,
+                                'ATTENDED',
+                                Colors.greenAccent,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 24),
+
+                  // Stats Section
+                  _buildStatisticsGrid(
+                    attendanceLogs,
+                    holidaysAsync.value ?? [],
+                    calculateAsWorking,
+                    _focusedDay,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Info Card
+                  yearlyLogsAsync.when(
+                    data: (yearlyLogs) {
+                      final stats = YearlyCalculator.calculateYearlyStats(
+                        year: currentYear,
+                        logs: yearlyLogs.cast<AttendanceLog>(),
+                        holidays: holidaysAsync.value ?? [],
+                        calculateHolidayAsWorking: calculateAsWorking,
+                      );
+                      return Column(
+                        children: [
+                          _buildProgressCard(context, stats),
+                          const SizedBox(height: 24),
+                          if (isSameDay(_selectedDay, DateTime.now()))
+                            _buildInfoCard(
+                              attendanceLogs,
+                              holidaysAsync.value ?? [],
+                            ),
+                        ],
+                      );
+                    },
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
+                ],
               ),
-              Container(
-                padding: const EdgeInsets.all(16.0),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).scaffoldBackgroundColor,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      offset: const Offset(0, -4),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: _buildLogButton(attendanceLogs, holidaysAsync),
-                ),
-              ),
-            ],
+            ),
           );
         },
         loading: () =>
             const Center(child: CircularProgressIndicator.adaptive()),
         error: (e, s) => Center(child: Text('Error: $e')),
+      ),
+      bottomNavigationBar: attendanceAsync.when(
+        data: (logs) {
+          final attendanceLogs = logs.cast<AttendanceLog>();
+          return Container(
+            padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  offset: const Offset(0, -4),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: _buildLogButton(attendanceLogs, holidaysAsync),
+            ),
+          );
+        },
+        loading: () => const SizedBox.shrink(),
+        error: (e, s) => const SizedBox.shrink(),
       ),
     );
   }
@@ -709,7 +708,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Text(
             'Cannot log future attendance',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.54),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.54),
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -734,7 +735,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Text(
             'Cannot log on Weekends',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.54),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.54),
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -759,7 +762,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Text(
             'Cannot log on Holidays',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.54),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.54),
               fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
@@ -812,6 +817,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   await ref
                       .read(attendanceServiceProvider)
                       ?.deleteAttendance(logToDelete.id);
+                  // Refresh smart notifications to incorporate the deleted log
+                  await refreshSmartNotifications(ref);
                   if (mounted) {
                     AppTheme.showSuccessSnackBar(context, 'Attendance Deleted');
                   }
@@ -843,10 +850,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
               try {
                 await ref.read(attendanceServiceProvider)?.logAttendance(log);
-                // Cancel today's notification if we just logged for today
-                if (isSameDay(logTime, DateTime.now())) {
-                  NotificationService.cancelDailyNotification();
-                }
+                // Refresh smart notifications to incorporate the new log
+                await refreshSmartNotifications(ref);
                 if (mounted) {
                   AppTheme.showSuccessSnackBar(
                     context,
@@ -980,7 +985,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            if (stats.totalShortfall > 0) ...[
+            if (stats.gettotalShortfallUpTo(_focusedDay.month) > 0) ...[
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -1002,7 +1007,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Shortfall Alert: ${stats.totalShortfall} ${stats.totalShortfall == 1 ? 'day' : 'days'} pending',
+                      'Shortfall Alert: ${stats.gettotalShortfallUpTo(_focusedDay.month)} ${stats.gettotalShortfallUpTo(_focusedDay.month) == 1 ? 'day' : 'days'} pending',
                       style: const TextStyle(
                         color: AppTheme.dangerColor,
                         fontWeight: FontWeight.bold,
@@ -1012,7 +1017,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ],
                 ),
               ),
-            ] else if (stats.totalExcess > 0) ...[
+            ] else if (stats.gettotalExcessUpTo(_focusedDay.month) > 0) ...[
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -1035,7 +1040,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Excess Alert: ${stats.totalExcess} ${stats.totalExcess == 1 ? 'day' : 'days'} extra',
+                      'Excess Alert: ${stats.gettotalExcessUpTo(_focusedDay.month)} ${stats.gettotalExcessUpTo(_focusedDay.month) == 1 ? 'day' : 'days'} extra',
                       style: const TextStyle(
                         color: Colors.greenAccent,
                         fontWeight: FontWeight.bold,

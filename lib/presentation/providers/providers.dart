@@ -7,6 +7,7 @@ import '../../services/attendance_service.dart';
 import '../../data/models/user_profile.dart'; // Add this import
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/notification_service.dart';
+import '../../services/admin_service.dart'; // Add this import
 
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:geolocator/geolocator.dart';
@@ -161,11 +162,8 @@ class NotificationEnabledNotifier extends Notifier<bool> {
 
     if (value) {
       await NotificationService.requestPermissions();
-      final time = ref.read(notificationTimeProvider);
-      await NotificationService.scheduleDailyNotification(time);
-    } else {
-      await NotificationService.cancelAllNotifications();
     }
+    await refreshSmartNotifications(ref, isEnabled: value);
 
     _debounce?.cancel();
     _debounce = Timer(const Duration(seconds: 2), () async {
@@ -208,8 +206,7 @@ class NotificationTimeNotifier extends Notifier<TimeOfDay> {
     await prefs.setInt('notification_minute', time.minute);
 
     if (ref.read(notificationEnabledProvider)) {
-      await NotificationService.cancelAllNotifications();
-      await NotificationService.scheduleDailyNotification(time);
+      await refreshSmartNotifications(ref, targetTime: time);
     }
 
     _debounce?.cancel();
@@ -228,4 +225,41 @@ class NotificationTimeNotifier extends Notifier<TimeOfDay> {
       }
     });
   }
+}
+
+Future<void> refreshSmartNotifications(
+  dynamic ref, {
+  bool? isEnabled,
+  TimeOfDay? targetTime,
+}) async {
+  // Add a small propagation delay to allow Firestore local cache to update the Streams
+  // before we rely on them for scheduling.
+  await Future.delayed(const Duration(milliseconds: 400));
+
+  final enabled = isEnabled ?? ref.read(notificationEnabledProvider);
+  if (!enabled) {
+    await NotificationService.cancelAllNotifications();
+    return;
+  }
+
+  final time = targetTime ?? ref.read(notificationTimeProvider);
+  final holidays = ref.read(holidaysStreamProvider).value ?? <DateTime>[];
+
+  final currentYear = DateTime.now().year;
+  final logsAsync = ref.read(yearlyAttendanceProvider(currentYear));
+  final List<DateTime> loggedDates = [];
+
+  if (logsAsync.value != null) {
+    for (var log in logsAsync.value!) {
+      if (log.date != null) {
+        loggedDates.add(log.date as DateTime);
+      }
+    }
+  }
+
+  await NotificationService.scheduleSmartNotifications(
+    time: time,
+    holidays: holidays,
+    loggedDates: loggedDates,
+  );
 }

@@ -69,117 +69,106 @@ class NotificationService {
     );
   }
 
-  static Future<void> scheduleDailyNotification(TimeOfDay time) async {
-    // Cancel any existing daily reminder first to avoid duplicates or stale times
-    await cancelDailyNotification();
+  static Future<void> scheduleSmartNotifications({
+    required TimeOfDay time,
+    required List<DateTime> holidays,
+    required List<DateTime> loggedDates,
+  }) async {
+    await cancelAllNotifications();
 
-    final scheduledDate = _nextInstanceOfTime(time);
-    developer.log(
-      'NotificationService: scheduling daily notification at $scheduledDate '
-      '(hour: ${time.hour}, minute: ${time.minute})',
-    );
-
-    await _notificationsPlugin.zonedSchedule(
-      id: 1, // Fixed ID for daily reminder
-      title: 'Check Attendance',
-      body: 'Don\'t forget to log your attendance today!',
-      scheduledDate: scheduledDate,
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'daily_reminder_channel',
-          'Daily Reminder',
-          channelDescription: 'Daily reminder to log attendance',
-          importance: Importance.max,
-          priority: Priority.high,
-          // Removed largeIcon as background isolates sometimes fail to resolve it
-        ),
-        iOS: DarwinNotificationDetails(),
-        macOS: DarwinNotificationDetails(),
-      ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
-    );
-
-    // Verify the notification was scheduled
-    final pendingNotifications = await _notificationsPlugin
-        .pendingNotificationRequests();
-    developer.log(
-      'NotificationService: ${pendingNotifications.length} pending notifications: '
-      '${pendingNotifications.map((n) => 'id=${n.id} title=${n.title}').join(', ')}',
-    );
-  }
-
-  static Future<void> cancelDailyNotification() async {
-    await _notificationsPlugin.cancel(id: 1);
-    developer.log('NotificationService: daily notification (id=1) cancelled');
-  }
-
-  /// Schedules the notification for the NEXT day (skipping today)
-  /// Used when attendance is logged for the current day.
-  static Future<void> scheduleNextDayNotification(TimeOfDay time) async {
-    await cancelDailyNotification();
-
-    final now = tz.TZDateTime.now(tz.local);
-    tz.TZDateTime scheduledDate = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      time.hour,
-      time.minute,
-    );
-
-    // If scheduled date is today or before, add 1 day to make it tomorrow
-    // actually, we WANT it to be tomorrow.
-    if (scheduledDate.isBefore(now) ||
-        scheduledDate.year == now.year &&
-            scheduledDate.month == now.month &&
-            scheduledDate.day == now.day) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
-    }
-
-    developer.log(
-      'NotificationService: scheduling NEXT daily notification at $scheduledDate '
-      '(hour: ${time.hour}, minute: ${time.minute})',
-    );
-
-    await _notificationsPlugin.zonedSchedule(
-      id: 1,
-      title: 'Check Attendance',
-      body: 'Don\'t forget to log your attendance today!',
-      scheduledDate: scheduledDate,
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'daily_reminder_channel',
-          'Daily Reminder',
-          channelDescription: 'Daily reminder to log attendance',
-          importance: Importance.max,
-          priority: Priority.high,
-          // Removed largeIcon as background isolates sometimes fail to resolve it
-        ),
-        iOS: DarwinNotificationDetails(),
-        macOS: DarwinNotificationDetails(),
-      ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
-    );
-  }
-
-  static tz.TZDateTime _nextInstanceOfTime(TimeOfDay time) {
     final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-    developer.log('NotificationService: tz.local = ${tz.local}, now = $now');
-    tz.TZDateTime scheduledDate = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      time.hour,
-      time.minute,
+    developer.log(
+      'NotificationService: scheduling smart notifications '
+      '(hour: ${time.hour}, minute: ${time.minute})',
     );
-    if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
+
+    int scheduledCount = 0;
+    int daysOffset = 0;
+
+    // Schedule exact notifications for the next 14 valid working days
+    while (scheduledCount < 14 && daysOffset < 30) {
+      tz.TZDateTime dateToEvaluate = tz.TZDateTime(
+        tz.local,
+        now.year,
+        now.month,
+        now.day,
+        time.hour,
+        time.minute,
+      ).add(Duration(days: daysOffset));
+
+      // Skip today if the time has already passed
+      if (dateToEvaluate.isBefore(now)) {
+        daysOffset++;
+        continue;
+      }
+
+      // Check 1: Weekend
+      if (dateToEvaluate.weekday == DateTime.saturday ||
+          dateToEvaluate.weekday == DateTime.sunday) {
+        daysOffset++;
+        continue;
+      }
+
+      // Check 2: Holiday
+      bool isHoliday = holidays.any(
+        (h) =>
+            h.year == dateToEvaluate.year &&
+            h.month == dateToEvaluate.month &&
+            h.day == dateToEvaluate.day,
+      );
+      if (isHoliday) {
+        daysOffset++;
+        continue;
+      }
+
+      // Check 3: Already Logged
+      bool isLogged = loggedDates.any(
+        (l) =>
+            l.year == dateToEvaluate.year &&
+            l.month == dateToEvaluate.month &&
+            l.day == dateToEvaluate.day,
+      );
+      if (isLogged) {
+        daysOffset++;
+        continue;
+      }
+
+      // Passed checks! Schedule exact notification
+      int notificationId = 100 + scheduledCount; // Avoid 1..5 collisions
+      await _scheduleExactNotification(notificationId, dateToEvaluate);
+
+      scheduledCount++;
+      daysOffset++;
     }
-    return scheduledDate;
+
+    final pending = await _notificationsPlugin.pendingNotificationRequests();
+    developer.log(
+      'NotificationService: ${pending.length} pending exact notifications scheduled.',
+    );
+  }
+
+  static Future<void> _scheduleExactNotification(
+    int id,
+    tz.TZDateTime scheduledDate,
+  ) async {
+    await _notificationsPlugin.zonedSchedule(
+      id: id,
+      title: 'Check Attendance',
+      body: 'Don\'t forget to log your attendance today!',
+      scheduledDate: scheduledDate,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'daily_reminder_channel',
+          'Daily Reminder',
+          channelDescription: 'Daily reminder to log attendance',
+          importance: Importance.max,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+        macOS: DarwinNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+    );
   }
 
   static Future<void> cancelAllNotifications() async {

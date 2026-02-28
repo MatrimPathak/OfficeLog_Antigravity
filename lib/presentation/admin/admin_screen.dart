@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
@@ -7,6 +8,7 @@ import '../../data/models/holiday.dart';
 import '../providers/providers.dart';
 import 'widgets/add_holiday_dialog.dart';
 import 'widgets/add_office_location_dialog.dart';
+import '../settings/background_logs_screen.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({super.key});
@@ -22,7 +24,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -54,6 +56,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
             Tab(text: 'Holidays'),
             Tab(text: 'Locations'),
             Tab(text: 'Settings'),
+            Tab(text: 'Feedback'),
           ],
         ),
       ),
@@ -64,6 +67,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
           HolidaysTab(),
           LocationsTab(),
           GlobalSettingsTab(),
+          FeedbackTab(),
         ],
       ),
     );
@@ -299,6 +303,35 @@ class GlobalSettingsTab extends ConsumerWidget {
                 activeThumbColor: AppTheme.primaryColor,
               ),
             ),
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.history, color: Colors.blueGrey),
+                title: Text(
+                  'Background Logs',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                subtitle: Text(
+                  'View background auto check-in execution logs.',
+                  style: TextStyle(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BackgroundLogsScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
           ],
         );
       },
@@ -378,6 +411,147 @@ class UsersTab extends ConsumerWidget {
       },
       loading: () => const Center(child: CircularProgressIndicator.adaptive()),
       error: (e, s) => Center(child: Text('Error: $e')),
+    );
+  }
+}
+
+class FeedbackTab extends ConsumerWidget {
+  const FeedbackTab({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final feedbackAsync = ref.watch(feedbackStreamProvider);
+
+    return feedbackAsync.when(
+      data: (feedbacks) {
+        if (feedbacks.isEmpty) {
+          return const Center(
+            child: Text(
+              'No feedback available.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+        return ListView.builder(
+          itemCount: feedbacks.length,
+          itemBuilder: (context, index) {
+            final fb = feedbacks[index];
+            final userName = fb['userName'] ?? 'Anonymous';
+            final email = fb['userEmail'] ?? 'Unknown Email';
+            final rating = fb['rating'] ?? 0;
+            final message = fb['message'] ?? '';
+            final createdAt = fb['createdAt'] as Timestamp?;
+            final dateStr = createdAt != null
+                ? DateFormat.yMMMd().add_jm().format(createdAt.toDate())
+                : 'Pending sync...';
+
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardTheme.color,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Theme.of(context).dividerColor),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$userName ($email)',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          message,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          dateStr,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.star,
+                              color: AppTheme.primaryColor,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              rating.toString(),
+                              style: const TextStyle(
+                                color: AppTheme.primaryColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () {
+                          final fbId = fb['id'] as String?;
+                          if (fbId != null) {
+                            ref.read(adminServiceProvider).deleteFeedback(fbId);
+                          }
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(4.0),
+                          child: Icon(
+                            Icons.delete_outline,
+                            color: AppTheme.dangerColor,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator.adaptive()),
+      error: (e, s) => Center(child: Text('Error loading feedback: $e')),
     );
   }
 }
