@@ -985,79 +985,70 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            if (stats.gettotalShortfallUpTo(_focusedDay.month) > 0) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? AppTheme.shortfallBgDark
-                      : AppTheme.shortfallBgLight,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: AppTheme.dangerColor,
-                      size: 16,
+            Builder(
+              builder: (context) {
+                final netBalance = stats.getNetBalanceUpTo(_focusedDay.month);
+
+                if (netBalance == 0) return const SizedBox.shrink();
+
+                final isExcess = netBalance > 0;
+                final amount = netBalance.abs();
+                final label = isExcess ? 'Excess Alert' : 'Shortfall Alert';
+                final word = amount == 1 ? 'day' : 'days';
+                final suffix = isExcess ? 'extra' : 'pending';
+                final icon = isExcess
+                    ? Icons.check_circle_outline
+                    : Icons.warning_amber_rounded;
+                final color = isExcess
+                    ? Colors.greenAccent
+                    : AppTheme.dangerColor;
+                final bgColor = isExcess
+                    ? color.withValues(alpha: 0.1)
+                    : (Theme.of(context).brightness == Brightness.dark
+                          ? AppTheme.shortfallBgDark
+                          : AppTheme.shortfallBgLight);
+
+                return Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Shortfall Alert: ${stats.gettotalShortfallUpTo(_focusedDay.month)} ${stats.gettotalShortfallUpTo(_focusedDay.month) == 1 ? 'day' : 'days'} pending',
-                      style: const TextStyle(
-                        color: AppTheme.dangerColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(8),
+                      border: isExcess
+                          ? Border.all(color: color.withValues(alpha: 0.2))
+                          : null,
                     ),
-                  ],
-                ),
-              ),
-            ] else if (stats.gettotalExcessUpTo(_focusedDay.month) > 0) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.greenAccent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.greenAccent.withValues(alpha: 0.2),
+                    child: Row(
+                      children: [
+                        Icon(icon, color: color, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          '$label: $amount $word $suffix',
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.check_circle_outline,
-                      color: Colors.greenAccent,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Excess Alert: ${stats.gettotalExcessUpTo(_focusedDay.month)} ${stats.gettotalExcessUpTo(_focusedDay.month) == 1 ? 'day' : 'days'} extra',
-                      style: const TextStyle(
-                        color: Colors.greenAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                );
+              },
+            ),
             const SizedBox(height: 16),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: progress > 1.0 ? 1.0 : progress,
                 minHeight: 8,
-                backgroundColor: Theme.of(context).canvasColor,
+                backgroundColor: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF1A2230)
+                    : Colors.grey.shade200,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   progress >= 1.0 ? Colors.greenAccent : Colors.blueAccent,
                 ),

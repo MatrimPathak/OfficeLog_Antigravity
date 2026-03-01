@@ -192,7 +192,7 @@ class YearlyStatsResult {
   final List<MonthlyStats> monthlyBreakdown;
   final Map<int, double> quarterlyPerformance; // 1-4 : percentage
 
-  int gettotalExcessUpTo(int targetMonth) {
+  int getNetBalanceUpTo(int targetMonth) {
     int requestedPresent = 0;
     int requestedRequired = 0;
 
@@ -203,48 +203,7 @@ class YearlyStatsResult {
       }
     }
 
-    int excess = requestedPresent - requestedRequired;
-    return excess < 0 ? 0 : excess;
-  }
-
-  int gettotalShortfallUpTo(int targetMonth) {
-    final now = DateTime.now();
-
-    // If viewing a future year, no shortfall
-    if (year > now.year) return 0;
-
-    // Current & Past Year Logic:
-    // Base Shortfall = Sum of (Required - Present) for months < current, where Required > Present. (Strict past debt).
-    // Current Month Status:
-    // If CurrentPresent > CurrentRequired, then Surplus = CurrentPresent - CurrentRequired.
-    // DisplayShortfall = Max(0, PastShortfall - Surplus).
-
-    // Calculate current month surplus (relative to the target Month cutoff)
-    // We only offset previous strict shortfall if the target month has surplus
-    int currentMonthSurplus = 0;
-    try {
-      final targetMonthStats = monthlyBreakdown.firstWhere(
-        (m) => m.month == targetMonth,
-      );
-      if (targetMonthStats.presentDays > targetMonthStats.requiredDays) {
-        currentMonthSurplus =
-            targetMonthStats.presentDays - targetMonthStats.requiredDays;
-      }
-    } catch (_) {
-      // Month might not be in breakdown
-    }
-
-    int strictPastShortfall = monthlyBreakdown
-        .where(
-          (m) =>
-              m.month < targetMonth &&
-              m.requiredDays > 0 &&
-              m.presentDays < m.requiredDays,
-        )
-        .fold(0, (sum, m) => sum + (m.requiredDays - m.presentDays));
-
-    int netShortfall = strictPastShortfall - currentMonthSurplus;
-    return netShortfall < 0 ? 0 : netShortfall;
+    return requestedPresent - requestedRequired;
   }
 
   YearlyStatsResult({

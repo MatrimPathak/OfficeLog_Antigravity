@@ -197,7 +197,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                             ? const Color(
                                                 0xFF2E88F6,
                                               ).withValues(alpha: 0.2)
-                                            : Colors.grey[800],
+                                            : (Theme.of(context).brightness ==
+                                                      Brightness.light
+                                                  ? Colors.grey[200]
+                                                  : Colors.grey[800]),
                                         shape: BoxShape.circle,
                                       ),
                                       child: Icon(

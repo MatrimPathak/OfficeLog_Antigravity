@@ -6,8 +6,9 @@ import '../../../services/admin_service.dart';
 
 class AddOfficeLocationDialog extends StatefulWidget {
   final WidgetRef ref;
+  final OfficeLocation? location;
 
-  const AddOfficeLocationDialog({super.key, required this.ref});
+  const AddOfficeLocationDialog({super.key, required this.ref, this.location});
 
   @override
   State<AddOfficeLocationDialog> createState() =>
@@ -19,6 +20,17 @@ class _AddOfficeLocationDialogState extends State<AddOfficeLocationDialog> {
   final addressController = TextEditingController();
   final latController = TextEditingController();
   final lngController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.location != null) {
+      nameController.text = widget.location!.name;
+      addressController.text = widget.location!.address;
+      latController.text = widget.location!.latitude.toString();
+      lngController.text = widget.location!.longitude.toString();
+    }
+  }
 
   @override
   void dispose() {
@@ -47,7 +59,9 @@ class _AddOfficeLocationDialogState extends State<AddOfficeLocationDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Add Office Location',
+                widget.location == null
+                    ? 'Add Office Location'
+                    : 'Edit Office Location',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurface,
                   fontSize: 20,
@@ -101,16 +115,24 @@ class _AddOfficeLocationDialogState extends State<AddOfficeLocationDialog> {
                       onPressed: () {
                         if (nameController.text.isNotEmpty) {
                           final loc = OfficeLocation(
-                            id: DateTime.now().millisecondsSinceEpoch
-                                .toString(),
+                            id:
+                                widget.location?.id ??
+                                DateTime.now().millisecondsSinceEpoch
+                                    .toString(),
                             name: nameController.text,
                             address: addressController.text,
                             latitude: double.tryParse(latController.text) ?? 0,
                             longitude: double.tryParse(lngController.text) ?? 0,
                           );
-                          widget.ref
-                              .read(adminServiceProvider)
-                              .addOfficeLocation(loc);
+                          if (widget.location == null) {
+                            widget.ref
+                                .read(adminServiceProvider)
+                                .addOfficeLocation(loc);
+                          } else {
+                            widget.ref
+                                .read(adminServiceProvider)
+                                .updateOfficeLocation(loc);
+                          }
                           Navigator.pop(context);
                         }
                       },
@@ -123,7 +145,7 @@ class _AddOfficeLocationDialogState extends State<AddOfficeLocationDialog> {
                         ),
                         elevation: 0,
                       ),
-                      child: const Text('Add'),
+                      child: Text(widget.location == null ? 'Add' : 'Save'),
                     ),
                   ),
                 ],

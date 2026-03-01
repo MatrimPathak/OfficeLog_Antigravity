@@ -81,6 +81,37 @@ class AttendanceService {
         });
   }
 
+  Future<List<int>> getActiveYears() async {
+    final currentYear = DateTime.now().year;
+
+    try {
+      final snapshot = await _attendanceCollection
+          .orderBy('date', descending: false)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final oldestLog = AttendanceLog.fromMap(
+          snapshot.docs.first.data() as Map<String, dynamic>,
+        );
+
+        final oldestYear = oldestLog.date.year;
+
+        // Ensure oldestYear is not completely wrong/future.
+        if (oldestYear <= currentYear) {
+          return List.generate(
+            currentYear - oldestYear + 1,
+            (index) => oldestYear + index,
+          );
+        }
+      }
+    } catch (_) {
+      // Fallback below
+    }
+
+    return [currentYear];
+  }
+
   Future<void> syncOfflineLogs() async {
     var box = await Hive.openBox<Map>('attendance_logs');
     var offlineLogs = box.values

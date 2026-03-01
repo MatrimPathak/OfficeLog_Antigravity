@@ -12,8 +12,8 @@ class SummaryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Determine current year. You might want to allow changing this.
     final currentYear = ref.watch(summaryYearProvider);
+    final activeYearsAsync = ref.watch(activeYearsProvider);
     final yearlyLogsAsync = ref.watch(yearlyAttendanceProvider(currentYear));
     final holidaysAsync = ref.watch(holidaysStreamProvider);
     final globalConfig = ref.watch(globalConfigProvider).value ?? {};
@@ -45,53 +45,71 @@ class SummaryScreen extends ConsumerWidget {
         ),
         centerTitle: false,
         actions: [
-          PopupMenuButton<int>(
-            initialValue: currentYear,
-            offset: const Offset(0, 40),
-            color: Theme.of(context).cardTheme.color,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: Theme.of(context).dividerColor),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Text(
-                    currentYear.toString(),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      fontFamily: Theme.of(
-                        context,
-                      ).textTheme.bodyLarge?.fontFamily,
-                    ),
+          activeYearsAsync.when(
+            data: (activeYears) {
+              return PopupMenuButton<int>(
+                initialValue: currentYear,
+                offset: const Offset(0, 40),
+                color: Theme.of(context).cardTheme.color,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Theme.of(context).dividerColor),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    color: Theme.of(context).primaryColor,
-                    size: 20,
-                  ),
-                ],
-              ),
-            ),
-            onSelected: (int newValue) {
-              ref.read(summaryYearProvider.notifier).update(newValue);
-            },
-            itemBuilder: (context) => [
-              for (int year = 2025; year <= DateTime.now().year; year++)
-                PopupMenuItem(
-                  value: year,
-                  child: Text(
-                    year.toString(),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
+                  child: Row(
+                    children: [
+                      Text(
+                        currentYear.toString(),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          fontFamily: Theme.of(
+                            context,
+                          ).textTheme.bodyLarge?.fontFamily,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Theme.of(context).primaryColor,
+                        size: 20,
+                      ),
+                    ],
                   ),
                 ),
-            ],
+                onSelected: (int newValue) {
+                  ref.read(summaryYearProvider.notifier).update(newValue);
+                },
+                itemBuilder: (context) => [
+                  for (int year in activeYears)
+                    PopupMenuItem(
+                      value: year,
+                      child: Text(
+                        year.toString(),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.only(right: 16.0),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+            error: (_, __) => const SizedBox(),
           ),
         ],
       ),
@@ -330,7 +348,6 @@ class SummaryScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 20),
-            // Progress Bar
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
@@ -344,79 +361,56 @@ class SummaryScreen extends ConsumerWidget {
                 minHeight: 8,
               ),
             ),
-            if (stats.gettotalShortfallUpTo(
+            Builder(
+              builder: (context) {
+                final netBalance = stats.getNetBalanceUpTo(
                   currentYear < DateTime.now().year ? 12 : DateTime.now().month,
-                ) >
-                0) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.dangerColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: AppTheme.dangerColor.withValues(alpha: 0.2),
+                );
+
+                if (netBalance == 0) return const SizedBox.shrink();
+
+                final isExcess = netBalance > 0;
+                final amount = netBalance.abs();
+                final label = isExcess ? 'Yearly Excess' : 'Yearly Shortfall';
+                final word = amount == 1 ? 'day' : 'days';
+                final suffix = isExcess ? 'extra' : 'pending';
+                final icon = isExcess
+                    ? Icons.check_circle_outline
+                    : Icons.warning_amber_rounded;
+                final color = isExcess
+                    ? Colors.greenAccent
+                    : AppTheme.dangerColor;
+
+                return Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: color.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(icon, color: color, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          '$label: $amount $word $suffix',
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: AppTheme.dangerColor,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Yearly Shortfall: ${stats.gettotalShortfallUpTo(currentYear < DateTime.now().year ? 12 : DateTime.now().month)} ${stats.gettotalShortfallUpTo(currentYear < DateTime.now().year ? 12 : DateTime.now().month) == 1 ? "day" : "days"}',
-                      style: const TextStyle(
-                        color: AppTheme.dangerColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ] else if (stats.gettotalExcessUpTo(
-                  currentYear < DateTime.now().year ? 12 : DateTime.now().month,
-                ) >
-                0) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.greenAccent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.greenAccent.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.check_circle_outline,
-                      color: Colors.greenAccent,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Yearly Excess: ${stats.gettotalExcessUpTo(currentYear < DateTime.now().year ? 12 : DateTime.now().month)} ${stats.gettotalExcessUpTo(currentYear < DateTime.now().year ? 12 : DateTime.now().month) == 1 ? "day" : "days"} extra',
-                      style: const TextStyle(
-                        color: Colors.greenAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ],
         ),
       ),

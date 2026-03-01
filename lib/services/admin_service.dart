@@ -64,6 +64,13 @@ class AdminService {
         .set(location.toMap());
   }
 
+  Future<void> updateOfficeLocation(OfficeLocation location) async {
+    await _firestore
+        .collection('office_locations')
+        .doc(location.id)
+        .set(location.toMap());
+  }
+
   Future<void> deleteOfficeLocation(String id) async {
     await _firestore.collection('office_locations').doc(id).delete();
   }

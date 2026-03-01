@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/admin_service.dart';
 import '../../data/models/holiday.dart';
+import '../../data/models/office_location.dart';
 import '../providers/providers.dart';
 import 'widgets/add_holiday_dialog.dart';
 import 'widgets/add_office_location_dialog.dart';
@@ -210,6 +211,7 @@ class LocationsTab extends ConsumerWidget {
                     border: Border.all(color: Theme.of(context).dividerColor),
                   ),
                   child: ListTile(
+                    onTap: () => _showAddLocationDialog(context, ref, loc),
                     title: Text(
                       loc.name,
                       style: TextStyle(
@@ -244,7 +246,7 @@ class LocationsTab extends ConsumerWidget {
               bottom: 16,
               right: 16,
               child: FloatingActionButton(
-                onPressed: () => _showAddLocationDialog(context, ref),
+                onPressed: () => _showAddLocationDialog(context, ref, null),
                 child: const Icon(Icons.add),
               ),
             ),
@@ -256,10 +258,15 @@ class LocationsTab extends ConsumerWidget {
     );
   }
 
-  void _showAddLocationDialog(BuildContext context, WidgetRef ref) {
+  void _showAddLocationDialog(
+    BuildContext context,
+    WidgetRef ref,
+    OfficeLocation? location,
+  ) {
     showDialog(
       context: context,
-      builder: (context) => AddOfficeLocationDialog(ref: ref),
+      builder: (context) =>
+          AddOfficeLocationDialog(ref: ref, location: location),
     );
   }
 }

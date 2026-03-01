@@ -71,7 +71,7 @@ class AutoCheckInService {
       accuracy: 100,
       loiteringDelayMs: 300000, // 5 minutes
       statusChangeDelayMs: 10000, // 10 seconds
-      useActivityRecognition: true, // true for battery savings
+      useActivityRecognition: false, // disabled as permission was removed
       allowMockLocations: _allowMockLocations,
       printDevLog: true,
       geofenceRadiusSortType: GeofenceRadiusSortType.DESC,

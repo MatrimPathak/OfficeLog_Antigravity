@@ -104,6 +104,14 @@ final yearlyAttendanceProvider = StreamProvider.family<List<dynamic>, int>((
   return Stream.value([]);
 });
 
+final activeYearsProvider = FutureProvider<List<int>>((ref) async {
+  final service = ref.watch(attendanceServiceProvider);
+  if (service != null) {
+    return await service.getActiveYears();
+  }
+  return [DateTime.now().year];
+});
+
 final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(
   ThemeModeNotifier.new,
 );

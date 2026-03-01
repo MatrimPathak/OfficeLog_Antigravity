@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "OfficeLog_Antigravity",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "OfficeLog_Antigravity (Profile Mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "OfficeLog_Antigravity (Release Mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        }
+    ]
+}
