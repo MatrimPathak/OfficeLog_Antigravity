@@ -195,6 +195,24 @@ class SummaryScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 24),
 
+                      // Monthly Average Hours Trend (Chart)
+                      const Text(
+                        'MONTHLY AVERAGE HOURS TREND',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildAverageHoursChart(
+                        context,
+                        ref,
+                        stats.monthlyBreakdown,
+                      ),
+                      const SizedBox(height: 24),
+
                       // Monthly Breakdown (List)
                       const Text(
                         'MONTHLY BREAKDOWN',
@@ -585,99 +603,223 @@ class SummaryScreen extends ConsumerWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
-      child: BarChart(
-        BarChartData(
-          gridData: const FlGridData(show: false),
-          titlesData: FlTitlesData(
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 35,
-                interval: 20,
-                getTitlesWidget: (value, meta) {
-                  return Text(
-                    '${value.toInt()}%',
-                    style: const TextStyle(color: Colors.grey, fontSize: 10),
-                  );
-                },
-              ),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                getTitlesWidget: (value, meta) {
-                  if (value >= 0 && value < 12) {
-                    final month = DateTime(2023, value.toInt() + 1, 1);
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        month.monthAbbr.toUpperCase(),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: 600, // Fixed width to ensure scrolling works
+          child: BarChart(
+            BarChartData(
+              gridData: const FlGridData(show: false),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 35,
+                    interval: 20,
+                    getTitlesWidget: (value, meta) {
+                      return Text(
+                        '${value.toInt()}%',
                         style: const TextStyle(
                           color: Colors.grey,
                           fontSize: 10,
                         ),
-                      ),
-                    );
-                  }
-                  return const Text('');
-                },
-              ),
-            ),
-          ),
-          borderData: FlBorderData(show: false),
-          barGroups: data.map((m) {
-            // Determine if the month is in the future
-            bool isFuture = DateTime(currentYear, m.month, 1).isAfter(now);
-
-            Color barColor;
-            if (isFuture) {
-              barColor = Colors.grey.withValues(alpha: 0.5);
-            } else if (m.requiredDays > 0 && m.presentDays >= m.requiredDays) {
-              barColor = AppTheme.primaryColor; // Green/Blue success color
-            } else if (m.requiredDays > 0) {
-              barColor = Colors.orangeAccent;
-            } else {
-              barColor = Colors.grey.withValues(alpha: 0.5);
-            }
-
-            return BarChartGroupData(
-              x: m.month - 1, // 0-based index
-              barRods: [
-                BarChartRodData(
-                  toY: m.attendancePercentage,
-                  color: barColor,
-                  width: 12,
-                  borderRadius: BorderRadius.circular(2),
-                  backDrawRodData: BackgroundBarChartRodData(
-                    show: true,
-                    toY: 100, // Max 100%
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF1A2230)
-                        : Colors.grey.shade200,
+                      );
+                    },
                   ),
                 ),
-              ],
-            );
-          }).toList(),
-          maxY: data.isEmpty
-              ? 100
-              : (data
-                            .map((e) => e.attendancePercentage)
-                            .reduce((a, b) => a > b ? a : b) >
-                        100
-                    ? (data
-                                      .map((e) => e.attendancePercentage)
-                                      .reduce((a, b) => a > b ? a : b) /
-                                  10)
-                              .ceil() *
-                          10.0
-                    : 100),
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (value, meta) {
+                      if (value >= 0 && value < 12) {
+                        final month = DateTime(2023, value.toInt() + 1, 1);
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            month.monthAbbr.toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 10,
+                            ),
+                          ),
+                        );
+                      }
+                      return const Text('');
+                    },
+                  ),
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              barGroups: data.map((m) {
+                // Determine if the month is in the future
+                bool isFuture = DateTime(currentYear, m.month, 1).isAfter(now);
+
+                Color barColor;
+                if (isFuture) {
+                  barColor = Colors.grey.withValues(alpha: 0.5);
+                } else if (m.requiredDays > 0 &&
+                    m.presentDays >= m.requiredDays) {
+                  barColor = AppTheme.primaryColor; // Green/Blue success color
+                } else if (m.requiredDays > 0) {
+                  barColor = Colors.orangeAccent;
+                } else {
+                  barColor = Colors.grey.withValues(alpha: 0.5);
+                }
+
+                return BarChartGroupData(
+                  x: m.month - 1, // 0-based index
+                  barRods: [
+                    BarChartRodData(
+                      toY: m.attendancePercentage,
+                      color: barColor,
+                      width: 12,
+                      borderRadius: BorderRadius.circular(2),
+                      backDrawRodData: BackgroundBarChartRodData(
+                        show: true,
+                        toY: 100, // Max 100%
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF1A2230)
+                            : Colors.grey.shade200,
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+              maxY: data.isEmpty
+                  ? 100
+                  : (data
+                                .map((e) => e.attendancePercentage)
+                                .reduce((a, b) => a > b ? a : b) >
+                            100
+                        ? (data
+                                          .map((e) => e.attendancePercentage)
+                                          .reduce((a, b) => a > b ? a : b) /
+                                      10)
+                                  .ceil() *
+                              10.0
+                        : 100),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAverageHoursChart(
+    BuildContext context,
+    WidgetRef ref,
+    List<MonthlyStats> data,
+  ) {
+    final currentYear = ref.watch(summaryYearProvider);
+    final now = DateTime.now();
+
+    double maxY = 10.0;
+    for (var m in data) {
+      if (m.presentDays > 0) {
+        final avg = m.totalHours / m.presentDays;
+        if (avg > maxY) maxY = avg.ceilToDouble();
+      }
+    }
+
+    return Container(
+      height: 200,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: 600, // Fixed width to ensure scrolling works
+          child: BarChart(
+            BarChartData(
+              gridData: const FlGridData(show: false),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 35,
+                    interval: 2,
+                    getTitlesWidget: (value, meta) {
+                      return Text(
+                        '${value.toInt()}h',
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 10,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                topTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                rightTitles: const AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (value, meta) {
+                      if (value >= 0 && value < 12) {
+                        final month = DateTime(2023, value.toInt() + 1, 1);
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            month.monthAbbr.toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 10,
+                            ),
+                          ),
+                        );
+                      }
+                      return const Text('');
+                    },
+                  ),
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              barGroups: data.map((m) {
+                bool isFuture = DateTime(currentYear, m.month, 1).isAfter(now);
+                double avgHours = m.presentDays > 0
+                    ? (m.totalHours / m.presentDays)
+                    : 0.0;
+
+                Color barColor = isFuture
+                    ? Colors.grey.withValues(alpha: 0.5)
+                    : Colors.blueAccent;
+
+                return BarChartGroupData(
+                  x: m.month - 1, // 0-based index
+                  barRods: [
+                    BarChartRodData(
+                      toY: avgHours,
+                      color: barColor,
+                      width: 12,
+                      borderRadius: BorderRadius.circular(2),
+                      backDrawRodData: BackgroundBarChartRodData(
+                        show: true,
+                        toY: maxY,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF1A2230)
+                            : Colors.grey.shade200,
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+              maxY: maxY,
+            ),
+          ),
         ),
       ),
     );

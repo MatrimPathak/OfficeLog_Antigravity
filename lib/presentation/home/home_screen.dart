@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../core/theme/app_theme.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -124,6 +125,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  // Daily Details
+                  _buildDailyDetailsCard(attendanceLogs),
+                  if (attendanceLogs.any(
+                    (log) => isSameDay(log.date, _selectedDay),
+                  ))
+                    const SizedBox(height: 24),
 
                   // Stats Section
                   _buildStatisticsGrid(
@@ -145,6 +152,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       );
                       return Column(
                         children: [
+                          _buildDailyDetailsCard(attendanceLogs),
+                          const SizedBox(height: 24),
                           _buildProgressCard(context, stats),
                           const SizedBox(height: 24),
                           if (isSameDay(_selectedDay, DateTime.now()))
@@ -557,6 +566,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ],
         ),
+        const SizedBox(height: 24),
+        const Text(
+          'MONTHLY TREND (HOURS)',
+          style: TextStyle(
+            color: Colors.grey,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildTrendChart(logs, displayDate),
       ],
     );
   }
@@ -597,6 +618,110 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               style: TextStyle(color: Colors.grey[600], fontSize: 10),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrendChart(List<AttendanceLog> logs, DateTime displayDate) {
+    final endOfMonth = DateTime(displayDate.year, displayDate.month + 1, 0);
+    final daysInMonth = endOfMonth.day;
+
+    Map<int, double> dailyHours = {};
+    for (int i = 1; i <= daysInMonth; i++) {
+      dailyHours[i] = 0.0;
+    }
+
+    for (var log in logs) {
+      if (log.date.year == displayDate.year &&
+          log.date.month == displayDate.month) {
+        if (log.inTime != null && log.outTime != null) {
+          final duration = log.outTime!.difference(log.inTime!);
+          dailyHours[log.date.day] = duration.inMinutes / 60.0;
+        }
+      }
+    }
+
+    double maxY = 10.0;
+    for (var val in dailyHours.values) {
+      if (val > maxY) maxY = val.ceilToDouble();
+    }
+
+    return Container(
+      height: 200,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: BarChart(
+        BarChartData(
+          gridData: const FlGridData(show: false),
+          titlesData: FlTitlesData(
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 30,
+                interval: 2,
+                getTitlesWidget: (value, meta) {
+                  return Text(
+                    value.toInt().toString(),
+                    style: const TextStyle(color: Colors.grey, fontSize: 10),
+                  );
+                },
+              ),
+            ),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: 5,
+                getTitlesWidget: (value, meta) {
+                  if (value > 0 && value <= daysInMonth) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text(
+                        value.toInt().toString(),
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 10,
+                        ),
+                      ),
+                    );
+                  }
+                  return const Text('');
+                },
+              ),
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          barGroups: dailyHours.entries.map((e) {
+            return BarChartGroupData(
+              x: e.key,
+              barRods: [
+                BarChartRodData(
+                  toY: e.value,
+                  color: AppTheme.primaryColor,
+                  width: 8,
+                  borderRadius: BorderRadius.circular(2),
+                  backDrawRodData: BackgroundBarChartRodData(
+                    show: true,
+                    toY: maxY,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF1A2230)
+                        : Colors.grey.shade200,
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+          maxY: maxY,
         ),
       ),
     );
@@ -773,25 +898,74 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
-    final isDayLogged = logs.any((log) => isSameDay(log.date, _selectedDay));
+    final dayLogs = logs
+        .where((log) => isSameDay(log.date, _selectedDay))
+        .toList();
+    final isDayLogged = dayLogs.isNotEmpty;
+    final todayLog = isDayLogged ? dayLogs.first : null;
+    final needsCheckout = isDayLogged && todayLog!.outTime == null;
 
-    return Container(
-      width: double.infinity,
+    Widget? mainButton;
+    if (!isDayLogged || needsCheckout) {
+      mainButton = Expanded(
+        child: Container(
+          height: 56,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDayLogged
+                  ? [Colors.orangeAccent, Colors.orange]
+                  : [AppTheme.logGradientStart, AppTheme.logGradientEnd],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color:
+                    (isDayLogged
+                            ? Colors.orangeAccent
+                            : AppTheme.logGradientStart)
+                        .withValues(alpha: 0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () async {
+                if (!isDayLogged) {
+                  await _handleLogAttendance(logs, null, false);
+                } else if (needsCheckout) {
+                  await _handleCheckOut(todayLog);
+                }
+              },
+              child: Center(
+                child: Text(
+                  isDayLogged ? 'Log Out' : 'Log Attendance',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget deleteButton = Container(
       height: 56,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDayLogged
-              ? [AppTheme.deleteGradientStart, AppTheme.deleteGradientEnd]
-              : [AppTheme.logGradientStart, AppTheme.logGradientEnd],
+        gradient: const LinearGradient(
+          colors: [AppTheme.deleteGradientStart, AppTheme.deleteGradientEnd],
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color:
-                (isDayLogged
-                        ? AppTheme.deleteGradientStart
-                        : AppTheme.logGradientStart)
-                    .withValues(alpha: 0.3),
+            color: AppTheme.deleteGradientStart.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -801,82 +975,292 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () async {
-            if (isDayLogged) {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (context) =>
-                    DeleteAttendanceDialog(date: _selectedDay),
-              );
-
-              if (confirmed == true) {
-                try {
-                  final logToDelete = logs.firstWhere(
-                    (log) => isSameDay(log.date, _selectedDay),
-                  );
-                  await ref
-                      .read(attendanceServiceProvider)
-                      ?.deleteAttendance(logToDelete.id);
-                  // Refresh smart notifications to incorporate the deleted log
-                  await refreshSmartNotifications(ref);
-                  if (mounted) {
-                    AppTheme.showSuccessSnackBar(context, 'Attendance Deleted');
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    AppTheme.showErrorSnackBar(context, 'Error: $e');
-                  }
-                }
-              }
-            } else {
-              // Log Attendance
-              final logTime = isSameDay(_selectedDay, DateTime.now())
-                  ? DateTime.now()
-                  : DateTime(
-                      _selectedDay.year,
-                      _selectedDay.month,
-                      _selectedDay.day,
-                      9,
-                      0,
-                    );
-
-              final log = AttendanceLog(
-                id: '${ref.read(currentUserProvider)!.uid}_${logTime.millisecondsSinceEpoch}',
-                userId: ref.read(currentUserProvider)!.uid,
-                date: logTime,
-                timestamp: logTime,
-                method: 'manual',
-              );
-
-              try {
-                await ref.read(attendanceServiceProvider)?.logAttendance(log);
-                // Refresh smart notifications to incorporate the new log
-                await refreshSmartNotifications(ref);
-                if (mounted) {
-                  AppTheme.showSuccessSnackBar(
-                    context,
-                    'Attendance Logged for ${DateFormat('MMMM d').format(_selectedDay)}!',
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  AppTheme.showErrorSnackBar(context, 'Error: $e');
-                }
-              }
-            }
-          },
+          onTap: () => _handleDeleteAttendance(logs),
           child: Center(
-            child: Text(
-              isDayLogged ? 'Delete Attendance' : 'Log Attendance',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            child: mainButton == null
+                ? const Text(
+                    'Delete Attendance',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                : const Icon(Icons.delete, color: Colors.white),
           ),
         ),
       ),
+    );
+
+    return Row(
+      children: [
+        if (mainButton != null) mainButton,
+        if (isDayLogged) ...[
+          if (mainButton != null) const SizedBox(width: 12),
+          mainButton == null
+              ? Expanded(child: deleteButton)
+              : SizedBox(width: 56, child: deleteButton),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _handleDeleteAttendance(List<AttendanceLog> logs) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => DeleteAttendanceDialog(date: _selectedDay),
+    );
+
+    if (confirmed == true) {
+      try {
+        final logToDelete = logs.firstWhere(
+          (log) => isSameDay(log.date, _selectedDay),
+        );
+        await ref
+            .read(attendanceServiceProvider)
+            ?.deleteAttendance(logToDelete.id);
+        await refreshSmartNotifications(ref);
+        if (mounted) {
+          AppTheme.showSuccessSnackBar(context, 'Attendance Deleted');
+        }
+      } catch (e) {
+        if (mounted) AppTheme.showErrorSnackBar(context, 'Error: $e');
+      }
+    }
+  }
+
+  Future<void> _handleCheckOut(AttendanceLog todayLog) async {
+    final initialTime = isSameDay(_selectedDay, DateTime.now())
+        ? TimeOfDay.now()
+        : const TimeOfDay(hour: 18, minute: 0);
+
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: 'Select Log Out Time',
+    );
+
+    if (pickedTime == null) return;
+
+    try {
+      final checkoutTime = DateTime(
+        _selectedDay.year,
+        _selectedDay.month,
+        _selectedDay.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+
+      final updatedLog = AttendanceLog(
+        id: todayLog.id,
+        userId: todayLog.userId,
+        date: todayLog.date,
+        timestamp: todayLog.timestamp,
+        isSynced: todayLog.isSynced,
+        method: todayLog.method,
+        inTime: todayLog.inTime,
+        outTime: checkoutTime,
+      );
+
+      await ref.read(attendanceServiceProvider)?.updateAttendance(updatedLog);
+      await refreshSmartNotifications(ref);
+      if (mounted) {
+        AppTheme.showSuccessSnackBar(context, 'Log Out Time Updated!');
+      }
+    } catch (e) {
+      if (mounted) {
+        AppTheme.showErrorSnackBar(context, 'Error: $e');
+      }
+    }
+  }
+
+  Future<void> _handleLogAttendance(
+    List<AttendanceLog> logs,
+    AttendanceLog? existingLog,
+    bool isEditing,
+  ) async {
+    final initialTime = isSameDay(_selectedDay, DateTime.now())
+        ? TimeOfDay.now()
+        : const TimeOfDay(hour: 9, minute: 0);
+
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: isEditing && existingLog != null
+          ? 'Edit Check-In Time'
+          : 'Select Check-In Time',
+    );
+
+    if (pickedTime == null) return;
+
+    final logTime = DateTime(
+      _selectedDay.year,
+      _selectedDay.month,
+      _selectedDay.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+
+    try {
+      if (existingLog != null) {
+        final updatedLog = AttendanceLog(
+          id: existingLog.id,
+          userId: existingLog.userId,
+          date: existingLog.date,
+          timestamp: existingLog.timestamp,
+          isSynced: existingLog.isSynced,
+          method: 'manual', // Overriding method to reflect user intervention
+          inTime: logTime,
+          outTime: existingLog.outTime,
+        );
+        await ref.read(attendanceServiceProvider)?.updateAttendance(updatedLog);
+      } else {
+        final now = DateTime.now();
+        final log = AttendanceLog(
+          id: '${ref.read(currentUserProvider)!.uid}_${now.millisecondsSinceEpoch}',
+          userId: ref.read(currentUserProvider)!.uid,
+          date: _selectedDay, // The log record date should match selected day
+          timestamp: now, // The physical creation time
+          method: 'manual',
+          inTime: logTime, // The actual Check In Time user selected
+        );
+        await ref.read(attendanceServiceProvider)?.logAttendance(log);
+      }
+
+      await refreshSmartNotifications(ref);
+      if (mounted) {
+        AppTheme.showSuccessSnackBar(
+          context,
+          'Attendance ${existingLog != null ? 'Updated' : 'Logged'} for ${DateFormat('MMMM d').format(_selectedDay)}!',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        AppTheme.showErrorSnackBar(context, 'Error: $e');
+      }
+    }
+  }
+
+  Widget _buildDailyDetailsCard(List<AttendanceLog> logs) {
+    final dayLogs = logs
+        .where((log) => isSameDay(log.date, _selectedDay))
+        .toList();
+    if (dayLogs.isEmpty) return const SizedBox.shrink();
+
+    final log = dayLogs.first;
+    final inTimeTxt = log.inTime != null
+        ? DateFormat('hh:mm a').format(log.inTime!)
+        : DateFormat('hh:mm a').format(log.timestamp);
+    final outTimeTxt = log.outTime != null
+        ? DateFormat('hh:mm a').format(log.outTime!)
+        : '--:--';
+
+    String totalTimeTxt = '--';
+    if (log.inTime != null && log.outTime != null) {
+      final duration = log.outTime!.difference(log.inTime!);
+      final hours = duration.inHours;
+      final minutes = duration.inMinutes.remainder(60);
+      totalTimeTxt = '${hours}h ${minutes}m';
+    } else if (log.outTime == null && isSameDay(_selectedDay, DateTime.now())) {
+      final startTime = log.inTime ?? log.timestamp;
+      final duration = DateTime.now().difference(startTime);
+      final hours = duration.inHours;
+      final minutes = duration.inMinutes.remainder(60);
+      totalTimeTxt = '${hours}h ${minutes}m (active)';
+    } else if (log.outTime == null && log.inTime != null) {
+      totalTimeTxt = 'Pending out-time';
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'DAILY DETAILS (${DateFormat('MMM d').format(_selectedDay)})',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                InkWell(
+                  onTap: () async {
+                    final result = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => EditDailyDetailsDialog(log: log),
+                    );
+                    if (result == true && mounted) {
+                      AppTheme.showSuccessSnackBar(
+                        context,
+                        'Times updated successfully.',
+                      );
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4.0,
+                      vertical: 2.0,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.edit,
+                          size: 14,
+                          color: AppTheme.logGradientStart,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'EDIT',
+                          style: TextStyle(
+                            color: AppTheme.logGradientStart,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildTimeColumn('Check-in', inTimeTxt, Colors.greenAccent),
+                _buildTimeColumn('Check-out', outTimeTxt, Colors.orangeAccent),
+                _buildTimeColumn('Total Time', totalTimeTxt, Colors.blueAccent),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeColumn(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1051,6 +1435,221 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     : Colors.grey.shade200,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   progress >= 1.0 ? Colors.greenAccent : Colors.blueAccent,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class EditDailyDetailsDialog extends ConsumerStatefulWidget {
+  final AttendanceLog log;
+  const EditDailyDetailsDialog({super.key, required this.log});
+
+  @override
+  ConsumerState<EditDailyDetailsDialog> createState() =>
+      _EditDailyDetailsDialogState();
+}
+
+class _EditDailyDetailsDialogState
+    extends ConsumerState<EditDailyDetailsDialog> {
+  late DateTime? _inTime;
+  late DateTime? _outTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _inTime = widget.log.inTime ?? widget.log.timestamp;
+    _outTime = widget.log.outTime;
+  }
+
+  Future<void> _pickTime(bool isInTime) async {
+    final initialTime = isInTime
+        ? (_inTime != null ? TimeOfDay.fromDateTime(_inTime!) : TimeOfDay.now())
+        : (_outTime != null
+              ? TimeOfDay.fromDateTime(_outTime!)
+              : TimeOfDay.now());
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: isInTime ? 'Select Login Time' : 'Select Log Out Time',
+    );
+
+    if (pickedTime != null) {
+      final baseDate = widget.log.date;
+      final newDateTime = DateTime(
+        baseDate.year,
+        baseDate.month,
+        baseDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+      setState(() {
+        if (isInTime) {
+          _inTime = newDateTime;
+        } else {
+          _outTime = newDateTime;
+        }
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    try {
+      final updatedLog = AttendanceLog(
+        id: widget.log.id,
+        userId: widget.log.userId,
+        date: widget.log.date,
+        timestamp: widget.log.timestamp,
+        isSynced: widget.log.isSynced,
+        method: 'manual', // Overriding method to reflect user intervention
+        inTime: _inTime,
+        outTime: _outTime,
+      );
+      await ref.read(attendanceServiceProvider)?.updateAttendance(updatedLog);
+      await refreshSmartNotifications(ref);
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppTheme.showErrorSnackBar(context, 'Error: $e');
+      }
+    }
+  }
+
+  Widget _buildTimeTile({
+    required String title,
+    required DateTime? time,
+    required bool isLogin,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        title: Text(
+          title,
+          style: TextStyle(color: Colors.grey[400], fontSize: 14),
+        ),
+        subtitle: Text(
+          time != null ? DateFormat('hh:mm a').format(time) : '--:--',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        trailing: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppTheme.logGradientStart.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.edit,
+            color: AppTheme.logGradientStart,
+            size: 20,
+          ),
+        ),
+        onTap: () => _pickTime(isLogin),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardTheme.color,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Theme.of(context).dividerColor),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Icon
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.logGradientStart.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.edit_calendar,
+                color: AppTheme.logGradientStart,
+                size: 32,
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Title
+            Text(
+              'Edit Daily Details',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Content
+            _buildTimeTile(title: 'Login Time', time: _inTime, isLogin: true),
+            const SizedBox(height: 12),
+            _buildTimeTile(
+              title: 'Log Out Time',
+              time: _outTime,
+              isLogin: false,
+            ),
+            const SizedBox(height: 32),
+            // Save Button
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.logGradientStart,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Save Changes',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Cancel Button
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                style: TextButton.styleFrom(
+                  backgroundColor: Theme.of(context).dividerColor,
+                  foregroundColor: Theme.of(context).colorScheme.onSurface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),

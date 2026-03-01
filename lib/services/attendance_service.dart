@@ -35,6 +35,32 @@ class AttendanceService {
     }
   }
 
+  Future<void> updateAttendance(AttendanceLog log) async {
+    // Update local Hive
+    var box = await Hive.openBox<Map>('attendance_logs');
+    await box.put(log.id, log.toMap());
+
+    try {
+      // Sync to Firestore
+      await _attendanceCollection.doc(log.id).update(log.toMap());
+
+      var updatedLog = AttendanceLog(
+        id: log.id,
+        userId: log.userId,
+        date: log.date,
+        timestamp: log.timestamp,
+        isSynced: true,
+        method: log.method,
+        inTime: log.inTime,
+        outTime: log.outTime,
+      );
+      await box.put(log.id, updatedLog.toMap());
+    } catch (e) {
+      // If document doesn't exist on Firestore for some reason, we can set it
+      await _attendanceCollection.doc(log.id).set(log.toMap());
+    }
+  }
+
   Future<void> deleteAttendance(String logId) async {
     // Delete from local Hive
     var box = await Hive.openBox<Map>('attendance_logs');
@@ -131,6 +157,8 @@ class AttendanceService {
           timestamp: log.timestamp,
           isSynced: true,
           method: log.method,
+          inTime: log.inTime,
+          outTime: log.outTime,
         );
 
         await box.put(log.id, updatedLog.toMap());

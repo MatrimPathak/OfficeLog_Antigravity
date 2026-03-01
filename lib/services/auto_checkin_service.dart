@@ -109,6 +109,11 @@ class AutoCheckInService {
         'Geofence: Entering/Dwelling in office area, checking attendance.',
       );
       await checkAndLogAttendance();
+    } else if (geofenceStatus == GeofenceStatus.EXIT) {
+      await _logBackgroundEvent(
+        'Geofence: Exiting office area, attempting check-out.',
+      );
+      await checkAndLogOutAttendance();
     }
   }
 
@@ -233,6 +238,7 @@ class AutoCheckInService {
           date: today,
           timestamp: today,
           method: 'auto',
+          inTime: today,
         );
         await attendanceService.logAttendance(log);
         await refreshSmartNotifications(ref);
@@ -247,6 +253,63 @@ class AutoCheckInService {
     } catch (e, stack) {
       developer.log('AutoCheckIn error: $e\n$stack');
       await _logBackgroundEvent('AutoCheckIn ERROR: $e');
+    }
+  }
+
+  Future<void> checkAndLogOutAttendance() async {
+    try {
+      final user = ref.read(currentUserProvider);
+      if (user == null) {
+        await _logBackgroundEvent('AutoCheckOut: No user logged in.');
+        return;
+      }
+
+      final today = DateTime.now();
+      final attendanceService = ref.read(attendanceServiceProvider);
+      if (attendanceService == null) return;
+
+      final logsStream = attendanceService.getAttendanceStream(today);
+      final logs = await logsStream.first;
+
+      final todayLogs = logs
+          .where((log) => StatsCalculator.isSameDay(log.date, today))
+          .toList();
+
+      if (todayLogs.isEmpty) {
+        developer.log('AutoCheckOut: No attendance logged today, skipping.');
+        return;
+      }
+
+      final todayLog = todayLogs.first;
+
+      if (todayLog.outTime != null) {
+        developer.log('AutoCheckOut: Already checked out today, skipping.');
+        return;
+      }
+
+      final updatedLog = AttendanceLog(
+        id: todayLog.id,
+        userId: todayLog.userId,
+        date: todayLog.date,
+        timestamp: todayLog.timestamp,
+        isSynced: todayLog.isSynced,
+        method: todayLog.method, // keeping the original method
+        inTime: todayLog.inTime,
+        outTime: today,
+      );
+
+      await attendanceService.updateAttendance(updatedLog);
+      await refreshSmartNotifications(ref);
+      await NotificationService.showNotification(
+        'Auto Check-out',
+        'You have been checked out!',
+      );
+      await _logBackgroundEvent(
+        'AutoCheckOut: SUCCESS - Checked out via background.',
+      );
+    } catch (e, stack) {
+      developer.log('AutoCheckOut error: $e\n$stack');
+      await _logBackgroundEvent('AutoCheckOut ERROR: $e');
     }
   }
 }

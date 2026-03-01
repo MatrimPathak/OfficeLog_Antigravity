@@ -7,6 +7,8 @@ class AttendanceLog {
   final DateTime timestamp;
   final bool isSynced;
   final String method; // 'manual', 'auto'
+  final DateTime? inTime;
+  final DateTime? outTime;
 
   AttendanceLog({
     required this.id,
@@ -15,6 +17,8 @@ class AttendanceLog {
     required this.timestamp,
     this.isSynced = false,
     required this.method,
+    this.inTime,
+    this.outTime,
   });
 
   Map<String, dynamic> toMap() {
@@ -25,6 +29,8 @@ class AttendanceLog {
       'timestamp': timestamp,
       'isSynced': isSynced,
       'method': method,
+      'inTime': inTime ?? timestamp, // fallback for backward compatibility
+      'outTime': outTime,
     };
   }
 
@@ -43,6 +49,10 @@ class AttendanceLog {
       timestamp: parseDate(map['timestamp']),
       isSynced: map['isSynced'] ?? false,
       method: map['method'] ?? 'manual',
+      inTime: map['inTime'] != null
+          ? parseDate(map['inTime'])
+          : parseDate(map['timestamp']),
+      outTime: map['outTime'] != null ? parseDate(map['outTime']) : null,
     );
   }
 }

@@ -227,6 +227,7 @@ class MonthlyStats {
   final int requiredDays;
   final int holidayDays;
   final double attendancePercentage;
+  final double totalHours;
 
   MonthlyStats({
     required this.month,
@@ -236,6 +237,7 @@ class MonthlyStats {
     required this.requiredDays,
     required this.holidayDays,
     required this.attendancePercentage,
+    this.totalHours = 0.0,
   });
 }
 
@@ -296,7 +298,16 @@ extension YearlyCalculator on StatsCalculator {
       double percentage = 0;
       if (stats.businessDays > 0) {
         percentage = (stats.logged / stats.businessDays) * 100;
-        // No cap at 100% as per user request to show actual working trend
+      }
+
+      double totalHours = 0.0;
+      final monthLogs = logs.where(
+        (l) => l.date.month == month && l.date.year == year,
+      );
+      for (var l in monthLogs) {
+        if (l.inTime != null && l.outTime != null) {
+          totalHours += l.outTime!.difference(l.inTime!).inMinutes / 60.0;
+        }
       }
 
       monthlyBreakdown.add(
@@ -308,6 +319,7 @@ extension YearlyCalculator on StatsCalculator {
           requiredDays: stats.required,
           holidayDays: stats.holidayCount,
           attendancePercentage: percentage,
+          totalHours: totalHours,
         ),
       );
 
