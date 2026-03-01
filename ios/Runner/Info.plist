@@ -56,6 +56,8 @@
 	<string>This app needs access to location when in the background to track attendance within the office geofence.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app needs access to location to track attendance within the office geofence.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>This app requires motion access to detect activity for accurate background attendance logging.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
