@@ -1,8 +1,11 @@
+import 'dart:io' show Platform;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+
 import '../data/models/user_profile.dart';
 
 class AuthService {
@@ -49,6 +52,55 @@ class AuthService {
       rethrow;
     } catch (e, stack) {
       debugPrint('General Sign-In Error: $e\n$stack');
+      rethrow;
+    }
+  }
+
+  Future<User?> signInWithApple() async {
+    try {
+      if (!kIsWeb && Platform.isIOS) {
+        final AuthorizationCredentialAppleID appleCredential =
+            await SignInWithApple.getAppleIDCredential(
+              scopes: [
+                AppleIDAuthorizationScopes.email,
+                AppleIDAuthorizationScopes.fullName,
+              ],
+            );
+
+        final OAuthProvider oAuthProvider = OAuthProvider('apple.com');
+        final AuthCredential credential = oAuthProvider.credential(
+          idToken: appleCredential.identityToken,
+          accessToken: appleCredential.authorizationCode,
+        );
+
+        final UserCredential userCredential = await _auth.signInWithCredential(
+          credential,
+        );
+        final User? user = userCredential.user;
+
+        if (user != null) {
+          await _saveUserToFirestore(user);
+        }
+
+        return user;
+      } else {
+        final OAuthProvider oAuthProvider = OAuthProvider('apple.com');
+        oAuthProvider.addScope('email');
+        oAuthProvider.addScope('name');
+
+        final UserCredential userCredential = await _auth.signInWithProvider(
+          oAuthProvider,
+        );
+        final User? user = userCredential.user;
+
+        if (user != null) {
+          await _saveUserToFirestore(user);
+        }
+
+        return user;
+      }
+    } catch (e, stack) {
+      debugPrint('Apple Sign-In Error: $e\n$stack');
       rethrow;
     }
   }

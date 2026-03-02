@@ -58,6 +58,7 @@ dependencies:
 
   workmanager: ^0.9.0
   geofence_service: any
+  sign_in_with_apple: ^7.0.1
 
 dev_dependencies:
   flutter_test:
