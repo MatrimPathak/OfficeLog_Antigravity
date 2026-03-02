@@ -142,9 +142,8 @@ class LoginScreen extends ConsumerWidget {
                           if (context.mounted && user == null) {
                             // user cancelled
                           }
-                        } catch (e, stack) {
+                        } catch (e) {
                           if (context.mounted) {
-                            debugPrint('Apple Sign-In Error: $e\n$stack');
                             AppTheme.showErrorSnackBar(
                               context,
                               'Signin Error, Please try again.',
