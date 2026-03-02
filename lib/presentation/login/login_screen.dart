@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -117,68 +115,67 @@ class LoginScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                if (!kIsWeb && Platform.isIOS) ...[
-                  const SizedBox(height: 16),
-                  // Apple Sign In Button
-                  Container(
-                    width: double.infinity,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () async {
-                          try {
-                            final user = await ref
-                                .read(authServiceProvider)
-                                .signInWithApple();
-                            if (context.mounted && user == null) {
-                              // user cancelled
-                            }
-                          } catch (e) {
-                            if (context.mounted) {
-                              AppTheme.showErrorSnackBar(
-                                context,
-                                'Signin Error, Please try again.',
-                              );
-                            }
+                const SizedBox(height: 16),
+                // Apple Sign In Button
+                Container(
+                  width: double.infinity,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () async {
+                        try {
+                          final user = await ref
+                              .read(authServiceProvider)
+                              .signInWithApple();
+                          if (context.mounted && user == null) {
+                            // user cancelled
                           }
-                        },
-                        borderRadius: BorderRadius.circular(16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            FaIcon(
-                              FontAwesomeIcons.apple,
+                        } catch (e, stack) {
+                          if (context.mounted) {
+                            debugPrint('Apple Sign-In Error: $e\n$stack');
+                            AppTheme.showErrorSnackBar(
+                              context,
+                              'Signin Error, Please try again.',
+                            );
+                          }
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          FaIcon(
+                            FontAwesomeIcons.apple,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'Continue with Apple',
+                            style: TextStyle(
                               color: Colors.white,
-                              size: 24,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                             ),
-                            SizedBox(width: 12),
-                            Text(
-                              'Continue with Apple',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                ],
+                ),
+                const SizedBox(height: 16),
                 // Term
                 Text(
                   'By continuing, you agree to our Terms & Privacy Policy.',
