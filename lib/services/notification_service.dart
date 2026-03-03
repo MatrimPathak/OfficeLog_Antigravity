@@ -3,7 +3,7 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter/material.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'dart:developer' as developer;
+import 'logger_service.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notificationsPlugin =
@@ -36,11 +36,17 @@ class NotificationService {
     // Detect the device's local timezone and set it
     final String timeZoneName = await FlutterTimezone.getLocalTimezone();
     tz.setLocalLocation(tz.getLocation(timeZoneName));
-    developer.log('NotificationService: timezone set to $timeZoneName');
+    LoggerService.instance.info(
+      'NotificationService: timezone set to $timeZoneName',
+      type: LogType.system,
+    );
   }
 
   static void _onNotificationTapped(NotificationResponse response) {
-    developer.log('NotificationService: notification tapped: ${response.id}');
+    LoggerService.instance.info(
+      'NotificationService: notification tapped: ${response.id}',
+      type: LogType.system,
+    );
   }
 
   static Future<void> showNotification(String title, String body) async {
@@ -77,9 +83,10 @@ class NotificationService {
     await cancelAllNotifications();
 
     final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
-    developer.log(
+    LoggerService.instance.info(
       'NotificationService: scheduling smart notifications '
       '(hour: ${time.hour}, minute: ${time.minute})',
+      type: LogType.system,
     );
 
     int scheduledCount = 0;
@@ -142,8 +149,9 @@ class NotificationService {
     }
 
     final pending = await _notificationsPlugin.pendingNotificationRequests();
-    developer.log(
+    LoggerService.instance.info(
       'NotificationService: ${pending.length} pending exact notifications scheduled.',
+      type: LogType.system,
     );
   }
 
@@ -173,7 +181,10 @@ class NotificationService {
 
   static Future<void> cancelAllNotifications() async {
     await _notificationsPlugin.cancelAll();
-    developer.log('NotificationService: all notifications cancelled');
+    LoggerService.instance.info(
+      'NotificationService: all notifications cancelled',
+      type: LogType.system,
+    );
   }
 
   static Future<void> requestPermissions() async {
@@ -186,8 +197,9 @@ class NotificationService {
 
     final bool? androidGranted = await androidImplementation
         ?.requestNotificationsPermission();
-    developer.log(
+    LoggerService.instance.info(
       'NotificationService: android notification permission granted: $androidGranted',
+      type: LogType.system,
     );
 
     // iOS
@@ -202,8 +214,9 @@ class NotificationService {
       badge: true,
       sound: true,
     );
-    developer.log(
+    LoggerService.instance.info(
       'NotificationService: ios notification permission granted: $iosGranted',
+      type: LogType.system,
     );
 
     // macOS
@@ -218,8 +231,9 @@ class NotificationService {
       badge: true,
       sound: true,
     );
-    developer.log(
+    LoggerService.instance.info(
       'NotificationService: macos notification permission granted: $macosGranted',
+      type: LogType.system,
     );
   }
 }

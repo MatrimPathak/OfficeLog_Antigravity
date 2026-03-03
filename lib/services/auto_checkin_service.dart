@@ -2,12 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geofence_service/geofence_service.dart'
     hide LocationPermission, LocationAccuracy;
-import 'package:hive_flutter/hive_flutter.dart';
-import 'dart:developer' as developer;
 import '../data/models/attendance_log.dart';
 import '../presentation/providers/providers.dart';
 import '../logic/stats_calculator.dart';
 import '../services/notification_service.dart';
+import '../services/logger_service.dart';
 
 class AutoCheckInService {
   static const bool _allowMockLocations = false; // Set to false for production
@@ -18,26 +17,8 @@ class AutoCheckInService {
   AutoCheckInService(this.ref);
 
   Future<void> _logBackgroundEvent(String message) async {
-    try {
-      final box = await Hive.openBox<String>('background_logs');
-      final timestamp = DateTime.now().toIso8601String();
-      await box.add('[$timestamp] $message');
-      if (box.length > 100) await box.deleteAt(0);
-    } catch (e) {
-      developer.log('Failed to write to Hive log: $e');
-    }
-  }
-
-  Future<void> _stopGeofenceService() async {
-    try {
-      await _geofenceService.stop();
-      _isInitialized = false;
-      await _logBackgroundEvent(
-        'Geofence: Service stopped (condition met, saving battery).',
-      );
-    } catch (e) {
-      developer.log('Failed to stop geofence service: $e');
-    }
+    // The globally available logger handles trimming, persisting, and printing
+    LoggerService.instance.background(message);
   }
 
   Future<void> initGeofence() async {
@@ -100,7 +81,9 @@ class AutoCheckInService {
     GeofenceStatus geofenceStatus,
     Location location,
   ) async {
-    developer.log('Geofence: Status changed: ${geofenceStatus.name}');
+    LoggerService.instance.background(
+      'Geofence: Status changed: ${geofenceStatus.name}',
+    );
     await _logBackgroundEvent('Geofence: Triggered ${geofenceStatus.name}');
 
     if (geofenceStatus == GeofenceStatus.ENTER ||
@@ -118,7 +101,7 @@ class AutoCheckInService {
   }
 
   void _onLocationChanged(Location location) {
-    developer.log(
+    LoggerService.instance.background(
       'Geofence: Location changed: ${location.latitude}, ${location.longitude}',
     );
   }
@@ -144,18 +127,18 @@ class AutoCheckInService {
       // 1. Workday-Only Check
       if (today.weekday == DateTime.saturday ||
           today.weekday == DateTime.sunday) {
-        developer.log('AutoCheckIn: Weekend, skipping check-in.');
-        await _stopGeofenceService();
+        LoggerService.instance.background('AutoCheckIn: Weekend, skipping.');
         return;
       }
 
       // 2. Time-of-Day Window (6:00 AM to 6:00 PM)
       if (today.hour < 6 || today.hour >= 18) {
-        developer.log('AutoCheckIn: Outside time window (6am-6pm), skipping.');
+        LoggerService.instance.background(
+          'AutoCheckIn: Outside time window (6am-6pm), skipping.',
+        );
         return;
       }
 
-      // 3. Already Checked-In Short-Circuit
       final attendanceService = ref.read(attendanceServiceProvider);
       if (attendanceService == null) return;
 
@@ -164,12 +147,6 @@ class AutoCheckInService {
       final isLogged = logs.any(
         (log) => StatsCalculator.isSameDay(log.date, today),
       );
-
-      if (isLogged) {
-        developer.log('AutoCheckIn: Already logged today, skipping.');
-        await _stopGeofenceService();
-        return;
-      }
 
       // 4. Ensure Geofence Engine is Active
       if (!_isInitialized) {
@@ -206,14 +183,16 @@ class AutoCheckInService {
           ),
         );
       } catch (e) {
-        developer.log(
+        LoggerService.instance.error(
           'AutoCheckIn: Failed precise location, trying last known: $e',
         );
         position = await Geolocator.getLastKnownPosition();
       }
 
       if (position == null) {
-        developer.log('AutoCheckIn: Could not determine location.');
+        LoggerService.instance.background(
+          'AutoCheckIn: Could not determine location.',
+        );
         await _logBackgroundEvent('AutoCheckIn: Could not determine location.');
         return;
       }
@@ -225,33 +204,84 @@ class AutoCheckInService {
         profile.officeLng!,
       );
 
-      developer.log('AutoCheckIn: Distance to office is $distance meters');
+      LoggerService.instance.background(
+        'AutoCheckIn: Distance to office is $distance meters',
+      );
       await _logBackgroundEvent(
         'AutoCheckIn: Distance is ${distance.toInt()}m',
       );
 
       // Threshold: 200 meters
       if (distance <= 200) {
-        final log = AttendanceLog(
-          id: '${user.uid}_${today.millisecondsSinceEpoch}',
-          userId: user.uid,
-          date: today,
-          timestamp: today,
-          method: 'auto',
-          inTime: today,
-        );
-        await attendanceService.logAttendance(log);
-        await refreshSmartNotifications(ref);
-        await NotificationService.showNotification(
-          'Auto Check-in',
-          'You have been checked in!',
-        );
-        await _logBackgroundEvent(
-          'AutoCheckIn: SUCCESS - Checked in via background.',
-        );
+        if (!isLogged) {
+          final log = AttendanceLog(
+            id: '${user.uid}_${today.millisecondsSinceEpoch}',
+            userId: user.uid,
+            date: today,
+            timestamp: today,
+            method: 'auto',
+            inTime: today,
+          );
+          await attendanceService.logAttendance(log);
+          await refreshSmartNotifications(ref);
+          await NotificationService.showNotification(
+            'Auto Check-in',
+            'You have been checked in!',
+          );
+          await _logBackgroundEvent(
+            'AutoCheckIn: SUCCESS - Checked in via background.',
+          );
+        } else {
+          // If already logged today, check if they were checked-out previously and returned.
+          final todayLogs = logs
+              .where((log) => StatsCalculator.isSameDay(log.date, today))
+              .toList();
+
+          if (todayLogs.isNotEmpty) {
+            final todayLog = todayLogs.first;
+            // If they have an outTime but they are back at the office, we should
+            // clear the outTime and effectively "re-check" them in
+            if (todayLog.outTime != null) {
+              final updatedLog = AttendanceLog(
+                id: todayLog.id,
+                userId: todayLog.userId,
+                date: todayLog.date,
+                timestamp: todayLog.timestamp,
+                isSynced: todayLog.isSynced,
+                method: todayLog.method,
+                inTime: todayLog.inTime,
+                outTime: null, // CLEAR outTime
+              );
+
+              await attendanceService.updateAttendance(updatedLog);
+              LoggerService.instance.background(
+                'AutoCheckIn: Returned to office. Cleared previous check-out time.',
+              );
+              await _logBackgroundEvent(
+                'AutoCheckIn: SUCCESS - Re-entered office, checkout cleared.',
+              );
+
+              await NotificationService.showNotification(
+                'Welcome Back',
+                'Your check-out time has been paused since you returned.',
+              );
+            } else {
+              LoggerService.instance.background(
+                'AutoCheckIn: Already logged today (and nearby).',
+              );
+            }
+          }
+        }
+      } else {
+        if (isLogged) {
+          LoggerService.instance.background(
+            'AutoCheckIn: Far from office, attempting check-out.',
+          );
+          await checkAndLogOutAttendance();
+        }
       }
     } catch (e, stack) {
-      developer.log('AutoCheckIn error: $e\n$stack');
+      LoggerService.instance.error('AutoCheckIn error: $e\n$stack');
       await _logBackgroundEvent('AutoCheckIn ERROR: $e');
     }
   }
@@ -276,39 +306,48 @@ class AutoCheckInService {
           .toList();
 
       if (todayLogs.isEmpty) {
-        developer.log('AutoCheckOut: No attendance logged today, skipping.');
+        LoggerService.instance.background(
+          'AutoCheckOut: No attendance logged today, skipping.',
+        );
         return;
       }
 
       final todayLog = todayLogs.first;
 
-      if (todayLog.outTime != null) {
-        developer.log('AutoCheckOut: Already checked out today, skipping.');
-        return;
-      }
-
+      // Always update the out time to the most recent departure event.
+      // This way if a user leaves the office at 3pm, and geo-triggers again at 4pm,
+      // the latest time acts as their updated outTime unless they re-entered.
       final updatedLog = AttendanceLog(
         id: todayLog.id,
         userId: todayLog.userId,
         date: todayLog.date,
         timestamp: todayLog.timestamp,
         isSynced: todayLog.isSynced,
-        method: todayLog.method, // keeping the original method
+        method: todayLog.method,
         inTime: todayLog.inTime,
         outTime: today,
       );
 
       await attendanceService.updateAttendance(updatedLog);
-      await refreshSmartNotifications(ref);
-      await NotificationService.showNotification(
-        'Auto Check-out',
-        'You have been checked out!',
-      );
-      await _logBackgroundEvent(
-        'AutoCheckOut: SUCCESS - Checked out via background.',
-      );
+
+      // We only want to notify the user of the VERY FIRST checkout
+      // so we don't spam notifications every 15m they are away from office.
+      if (todayLog.outTime == null) {
+        await refreshSmartNotifications(ref);
+        await NotificationService.showNotification(
+          'Auto Check-out',
+          'You have been checked out!',
+        );
+        await _logBackgroundEvent(
+          'AutoCheckOut: SUCCESS - First checkout of the day.',
+        );
+      } else {
+        await _logBackgroundEvent(
+          'AutoCheckOut: SUCCESS - Updated existing checkout time.',
+        );
+      }
     } catch (e, stack) {
-      developer.log('AutoCheckOut error: $e\n$stack');
+      LoggerService.instance.error('AutoCheckOut error: $e\n$stack');
       await _logBackgroundEvent('AutoCheckOut ERROR: $e');
     }
   }

@@ -9,7 +9,7 @@ import '../../data/models/office_location.dart';
 import '../providers/providers.dart';
 import 'widgets/add_holiday_dialog.dart';
 import 'widgets/add_office_location_dialog.dart';
-import '../settings/background_logs_screen.dart';
+import 'app_logs_screen.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({super.key});
@@ -315,13 +315,13 @@ class GlobalSettingsTab extends ConsumerWidget {
               child: ListTile(
                 leading: const Icon(Icons.history, color: Colors.blueGrey),
                 title: Text(
-                  'Background Logs',
+                  'Application Logs',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 subtitle: Text(
-                  'View background auto check-in execution logs.',
+                  'View system, error, and background task logs.',
                   style: TextStyle(
                     color: Theme.of(
                       context,
@@ -332,9 +332,7 @@ class GlobalSettingsTab extends ConsumerWidget {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const BackgroundLogsScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const AppLogsScreen()),
                   );
                 },
               ),

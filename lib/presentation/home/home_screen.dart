@@ -14,6 +14,8 @@ import '../settings/settings_screen.dart';
 import '../summary/summary_screen.dart';
 
 import '../../services/auto_checkin_service.dart';
+import '../../services/notification_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../services/admin_service.dart';
 import 'widgets/delete_attendance_dialog.dart';
@@ -35,6 +37,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     // Trigger auto check-in check
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Permission.notification.request();
+      await NotificationService.requestPermissions();
       await ref.read(autoCheckInServiceProvider).initGeofence();
       await ref.read(autoCheckInServiceProvider).checkAndLogAttendance();
     });
@@ -152,8 +156,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       );
                       return Column(
                         children: [
-                          _buildDailyDetailsCard(attendanceLogs),
-                          const SizedBox(height: 24),
                           _buildProgressCard(context, stats),
                           const SizedBox(height: 24),
                           if (isSameDay(_selectedDay, DateTime.now()))
@@ -1500,6 +1502,16 @@ class _EditDailyDetailsDialogState
 
   Future<void> _save() async {
     try {
+      if (_inTime != null && _outTime != null) {
+        if (_outTime!.isBefore(_inTime!)) {
+          AppTheme.showErrorSnackBar(
+            context,
+            'Check-out time cannot be earlier than check-in time.',
+          );
+          return;
+        }
+      }
+
       final updatedLog = AttendanceLog(
         id: widget.log.id,
         userId: widget.log.userId,

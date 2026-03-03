@@ -6,6 +6,7 @@ import '../providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/admin_service.dart';
 import '../../services/background_service.dart';
+import '../../services/notification_service.dart';
 import '../../data/models/office_location.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
@@ -42,6 +43,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           }
         }
         await Permission.ignoreBatteryOptimizations.request();
+        await Permission.notification.request();
+        await NotificationService.requestPermissions();
       }
 
       final user = ref.read(currentUserProvider);
