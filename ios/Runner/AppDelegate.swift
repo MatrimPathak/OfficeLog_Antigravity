@@ -9,7 +9,8 @@ import GoogleMaps
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GMSServices.provideAPIKey("YOUR_IOS_MAPS_API_KEY_HERE")
+    let mapsApiKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String ?? ""
+    GMSServices.provideAPIKey(mapsApiKey)
     // Used by plugin: native_geofence
     NativeGeofencePlugin.setPluginRegistrantCallback { registry in
         GeneratedPluginRegistrant.register(with: registry)
