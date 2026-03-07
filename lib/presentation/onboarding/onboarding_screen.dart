@@ -5,9 +5,10 @@ import 'package:permission_handler/permission_handler.dart';
 import '../providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/admin_service.dart';
-import '../../services/background_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/auto_checkin_service.dart';
 import '../../data/models/office_location.dart';
+import 'location_picker_screen.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -56,11 +57,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               _selectedLocation!.name,
               _selectedLocation!.latitude,
               _selectedLocation!.longitude,
+              address: _selectedLocation!.address,
             );
 
-        // --- AUTONOMOUS REGISTRATION ---
-        // As soon as the user finishes onboarding, aggressively attempt to schedule the background heartbeat.
-        await BackgroundService.checkAndRegisterTask();
+        await ref.read(autoCheckInServiceProvider).initGeofence();
       }
     } catch (e) {
       if (mounted) {
@@ -164,7 +164,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     context,
                   ).textTheme.bodyLarge?.copyWith(color: Colors.grey[400]),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
                 Expanded(
                   child: locationsAsync.when(
                     data: (locations) {
@@ -173,7 +173,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 16),
                         itemBuilder: (context, index) {
                           final loc = locations[index];
-                          final isSelected = _selectedLocation == loc;
+                          final isSelected = _selectedLocation?.id == loc.id;
                           return Card(
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
@@ -231,7 +231,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                                               ).colorScheme.onSurface,
                                             ),
                                           ),
-                                          // Optional: Add address if available in model
                                         ],
                                       ),
                                     ),
@@ -257,6 +256,30 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         style: TextStyle(color: Colors.red),
                       ),
                     ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Custom Location Option
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final result = await Navigator.push<OfficeLocation>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LocationPickerScreen(),
+                      ),
+                    );
+                    if (result != null) {
+                      setState(() => _selectedLocation = result);
+                    }
+                  },
+                  icon: const Icon(Icons.add_location_alt),
+                  label: const Text('Pick Custom Location on Map'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    side: BorderSide(color: AppTheme.primaryColor),
                   ),
                 ),
                 const SizedBox(height: 24),

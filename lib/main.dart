@@ -9,12 +9,14 @@ import 'presentation/onboarding/onboarding_screen.dart';
 import 'presentation/providers/providers.dart';
 import 'services/notification_service.dart';
 import 'services/background_service.dart';
+import 'services/attendance_service.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  AttendanceService.initializeSettings();
   await Hive.initFlutter();
 
   final prefs = await SharedPreferences.getInstance();

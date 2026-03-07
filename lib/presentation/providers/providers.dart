@@ -29,6 +29,10 @@ final batteryOptimizationProvider = FutureProvider<bool>((ref) async {
   return await Permission.ignoreBatteryOptimizations.isGranted;
 });
 
+final backgroundLocationPermissionProvider = FutureProvider<bool>((ref) async {
+  return await Permission.locationAlways.isGranted;
+});
+
 // Auth Providers
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError();

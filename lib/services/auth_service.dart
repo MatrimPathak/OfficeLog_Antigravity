@@ -202,12 +202,14 @@ class AuthService {
     String uid,
     String location,
     double? lat,
-    double? lng,
-  ) async {
+    double? lng, {
+    String? address,
+  }) async {
     await _firestore.collection('users').doc(uid).update({
       'officeLocation': location,
       'officeLat': lat,
       'officeLng': lng,
+      if (address != null) 'officeAddress': address,
     });
   }
 

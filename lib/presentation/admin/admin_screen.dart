@@ -312,6 +312,35 @@ class GlobalSettingsTab extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             Card(
+              child: SwitchListTile(
+                title: Text(
+                  'Allow Mock Location',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                subtitle: Text(
+                  'When enabled, mock (spoofed) locations can be used for auto check-in. Use for testing only.',
+                  style: TextStyle(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                value: config['allowMockLocation'] ?? false,
+                onChanged: (value) async {
+                  await ref
+                      .read(sharedPreferencesProvider)
+                      .setBool('allowMockLocation', value);
+                  ref.read(adminServiceProvider).updateGlobalConfig({
+                    'allowMockLocation': value,
+                  });
+                },
+                activeThumbColor: AppTheme.primaryColor,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
               child: ListTile(
                 leading: const Icon(Icons.history, color: Colors.blueGrey),
                 title: Text(

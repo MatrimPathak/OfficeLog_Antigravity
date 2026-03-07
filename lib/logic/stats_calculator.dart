@@ -305,8 +305,8 @@ extension YearlyCalculator on StatsCalculator {
         (l) => l.date.month == month && l.date.year == year,
       );
       for (var l in monthLogs) {
-        if (l.inTime != null && l.outTime != null) {
-          totalHours += l.outTime!.difference(l.inTime!).inMinutes / 60.0;
+        for (var session in l.sessions) {
+          totalHours += session.duration.inMinutes / 60.0;
         }
       }
 

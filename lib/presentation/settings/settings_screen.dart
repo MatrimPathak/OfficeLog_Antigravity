@@ -484,7 +484,7 @@ class SettingsScreen extends ConsumerWidget {
         ),
       );
     } else if (permission == LocationPermission.always) {
-      await BackgroundService.registerPeriodicTask();
+      await BackgroundService.checkAndRegisterTask();
       if (context.mounted) {
         AppTheme.showSuccessSnackBar(
           context,

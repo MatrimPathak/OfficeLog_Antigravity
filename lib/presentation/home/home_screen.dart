@@ -16,9 +16,11 @@ import '../summary/summary_screen.dart';
 import '../../services/auto_checkin_service.dart';
 import '../../services/notification_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../services/admin_service.dart';
 import 'widgets/delete_attendance_dialog.dart';
+import 'package:native_geofence/native_geofence.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -39,8 +41,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Permission.notification.request();
       await NotificationService.requestPermissions();
-      await ref.read(autoCheckInServiceProvider).initGeofence();
-      await ref.read(autoCheckInServiceProvider).checkAndLogAttendance();
+
+      final autoService = ref.read(autoCheckInServiceProvider);
+      await autoService.initGeofence();
+
+      // Debug: Log registered geofences to console
+      try {
+        final registered = await NativeGeofenceManager.instance
+            .getRegisteredGeofences();
+        debugPrint(
+          'DEBUG: Home initialized geofencing. Registered count: ${registered.length}',
+        );
+        for (var g in registered) {
+          debugPrint(
+            'DEBUG: Geofence Active: ${g.id} @ ${g.location.latitude}, ${g.location.longitude}',
+          );
+        }
+      } catch (e) {
+        debugPrint('DEBUG: Failed to query registered geofences: $e');
+      }
+
+      // Sync any pending offline logs from Hive to Firestore
+      await ref.read(attendanceServiceProvider)?.syncOfflineLogs();
     });
   }
 
@@ -91,6 +113,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _buildDebugLocationInfo(),
                   const SizedBox(height: 16),
                   // Calendar section (Top)
                   Card(
@@ -193,10 +216,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            child: SafeArea(
-              top: false,
-              child: _buildLogButton(attendanceLogs, holidaysAsync),
-            ),
+            child: _buildLogButton(attendanceLogs, holidaysAsync, globalConfig),
           );
         },
         loading: () => const SizedBox.shrink(),
@@ -810,7 +830,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildLogButton(
     List<AttendanceLog> logs,
     AsyncValue<List<DateTime>> holidaysAsync,
+    Map<String, dynamic> globalConfig,
   ) {
+    final allowMockLocation = globalConfig['allowMockLocation'] ?? false;
+
     // Check if the selected day is in the future
     final now = DateTime.now();
     // Compare dates only (ignoring time)
@@ -846,10 +869,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
-    // Check for Weekend
-    // Saturday=6, Sunday=7
-    if (_selectedDay.weekday == DateTime.saturday ||
-        _selectedDay.weekday == DateTime.sunday) {
+    // Check for Weekend (Bypassed if allowMockLocation is true)
+    if (!allowMockLocation &&
+        (_selectedDay.weekday == DateTime.saturday ||
+            _selectedDay.weekday == DateTime.sunday)) {
       return Container(
         width: double.infinity,
         height: 56,
@@ -873,10 +896,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
-    // Check for Holiday
+    // Check for Holiday (Bypassed if allowMockLocation is true)
     final holidays = holidaysAsync.value ?? [];
     final isHoliday = holidays.any((h) => isSameDay(h, _selectedDay));
-    if (isHoliday) {
+    if (!allowMockLocation && isHoliday) {
       return Container(
         width: double.infinity,
         height: 56,
@@ -1053,6 +1076,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         pickedTime.minute,
       );
 
+      final sessions = List<AttendanceSession>.from(todayLog.sessions);
+      if (sessions.isNotEmpty) {
+        sessions[sessions.length - 1] = AttendanceSession(
+          inTime: sessions.last.inTime,
+          outTime: checkoutTime,
+        );
+      } else {
+        sessions.add(
+          AttendanceSession(
+            inTime: todayLog.inTime ?? todayLog.timestamp,
+            outTime: checkoutTime,
+          ),
+        );
+      }
+
       final updatedLog = AttendanceLog(
         id: todayLog.id,
         userId: todayLog.userId,
@@ -1062,6 +1100,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         method: todayLog.method,
         inTime: todayLog.inTime,
         outTime: checkoutTime,
+        sessions: sessions,
       );
 
       await ref.read(attendanceServiceProvider)?.updateAttendance(updatedLog);
@@ -1105,6 +1144,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     try {
       if (existingLog != null) {
+        final sessions = List<AttendanceSession>.from(existingLog.sessions);
+        if (sessions.isNotEmpty) {
+          sessions[0] = AttendanceSession(
+            inTime: logTime,
+            outTime: sessions[0].outTime,
+          );
+        } else {
+          sessions.add(
+            AttendanceSession(inTime: logTime, outTime: existingLog.outTime),
+          );
+        }
+
         final updatedLog = AttendanceLog(
           id: existingLog.id,
           userId: existingLog.userId,
@@ -1114,17 +1165,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           method: 'manual', // Overriding method to reflect user intervention
           inTime: logTime,
           outTime: existingLog.outTime,
+          sessions: sessions,
         );
         await ref.read(attendanceServiceProvider)?.updateAttendance(updatedLog);
       } else {
         final now = DateTime.now();
         final log = AttendanceLog(
-          id: '${ref.read(currentUserProvider)!.uid}_${now.millisecondsSinceEpoch}',
+          id: '${ref.read(currentUserProvider)!.uid}_${_selectedDay.year}-${_selectedDay.month}-${_selectedDay.day}',
           userId: ref.read(currentUserProvider)!.uid,
           date: _selectedDay, // The log record date should match selected day
           timestamp: now, // The physical creation time
           method: 'manual',
           inTime: logTime, // The actual Check In Time user selected
+          sessions: [AttendanceSession(inTime: logTime)],
         );
         await ref.read(attendanceServiceProvider)?.logAttendance(log);
       }
@@ -1150,15 +1203,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (dayLogs.isEmpty) return const SizedBox.shrink();
 
     final log = dayLogs.first;
-    final inTimeTxt = log.inTime != null
-        ? DateFormat('hh:mm a').format(log.inTime!)
-        : DateFormat('hh:mm a').format(log.timestamp);
-    final outTimeTxt = log.outTime != null
-        ? DateFormat('hh:mm a').format(log.outTime!)
-        : '--:--';
+    final inTimeTxt = log.sessions.isNotEmpty
+        ? DateFormat('hh:mm a').format(log.sessions.first.inTime)
+        : (log.inTime != null
+              ? DateFormat('hh:mm a').format(log.inTime!)
+              : DateFormat('hh:mm a').format(log.timestamp));
+
+    final outTimeTxt =
+        log.sessions.isNotEmpty && log.sessions.last.outTime != null
+        ? DateFormat('hh:mm a').format(log.sessions.last.outTime!)
+        : (log.outTime != null
+              ? DateFormat('hh:mm a').format(log.outTime!)
+              : '--:--');
 
     String totalTimeTxt = '--';
-    if (log.inTime != null && log.outTime != null) {
+    if (log.sessions.isNotEmpty) {
+      double totalHrs = 0;
+      bool hasActive = false;
+      for (var s in log.sessions) {
+        totalHrs += s.duration.inMinutes / 60.0;
+        if (s.outTime == null && isSameDay(_selectedDay, DateTime.now())) {
+          hasActive = true;
+          totalHrs += DateTime.now().difference(s.inTime).inMinutes / 60.0;
+        }
+      }
+      final hr = totalHrs.floor();
+      final min = ((totalHrs - hr) * 60).round();
+      if (hasActive) {
+        totalTimeTxt = '${hr}h ${min}m (active)';
+      } else {
+        totalTimeTxt = '${hr}h ${min}m';
+      }
+    } else if (log.inTime != null && log.outTime != null) {
       final duration = log.outTime!.difference(log.inTime!);
       final hours = duration.inHours;
       final minutes = duration.inMinutes.remainder(60);
@@ -1445,6 +1521,123 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
   }
+
+  Widget _buildDebugLocationInfo() {
+    final userProfile = ref.watch(userProfileProvider).value;
+    if (userProfile == null) return const SizedBox.shrink();
+
+    final officeLat = userProfile.officeLat;
+    final officeLng = userProfile.officeLng;
+
+    return StreamBuilder<Position>(
+      stream: Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          distanceFilter: 0,
+        ),
+      ),
+      builder: (context, snapshot) {
+        String distanceText = 'Calculating distance...';
+        bool isMockedText = false;
+        if (snapshot.hasData && officeLat != null && officeLng != null) {
+          final pos = snapshot.data!;
+          final distance = Geolocator.distanceBetween(
+            pos.latitude,
+            pos.longitude,
+            officeLat,
+            officeLng,
+          );
+          distanceText = '${distance.toInt()}m away';
+          isMockedText = pos.isMocked;
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          margin: const EdgeInsets.only(top: 8),
+          decoration: BoxDecoration(
+            color: Colors.redAccent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '📍 OFFICE TARGET',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      if (ref
+                              .watch(globalConfigProvider)
+                              .value?['allowMockLocation'] ==
+                          true)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          margin: const EdgeInsets.only(right: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'DEBUG MODE',
+                            style: TextStyle(fontSize: 8, color: Colors.green),
+                          ),
+                        ),
+                      if (isMockedText)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'MOCKED',
+                            style: TextStyle(fontSize: 8, color: Colors.orange),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$officeLat, $officeLng',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const Divider(height: 12, color: Colors.redAccent),
+              Text(
+                'DISTANCE: $distanceText',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.redAccent,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 class EditDailyDetailsDialog extends ConsumerStatefulWidget {
@@ -1458,21 +1651,25 @@ class EditDailyDetailsDialog extends ConsumerStatefulWidget {
 
 class _EditDailyDetailsDialogState
     extends ConsumerState<EditDailyDetailsDialog> {
-  late DateTime? _inTime;
-  late DateTime? _outTime;
+  late List<AttendanceSession> _sessions;
 
   @override
   void initState() {
     super.initState();
-    _inTime = widget.log.inTime ?? widget.log.timestamp;
-    _outTime = widget.log.outTime;
+    _sessions = List<AttendanceSession>.from(widget.log.sessions);
+    if (_sessions.isEmpty) {
+      _sessions.add(
+        AttendanceSession(inTime: widget.log.inTime ?? widget.log.timestamp),
+      );
+    }
   }
 
-  Future<void> _pickTime(bool isInTime) async {
+  Future<void> _pickTime(int index, bool isInTime) async {
+    final session = _sessions[index];
     final initialTime = isInTime
-        ? (_inTime != null ? TimeOfDay.fromDateTime(_inTime!) : TimeOfDay.now())
-        : (_outTime != null
-              ? TimeOfDay.fromDateTime(_outTime!)
+        ? TimeOfDay.fromDateTime(session.inTime)
+        : (session.outTime != null
+              ? TimeOfDay.fromDateTime(session.outTime!)
               : TimeOfDay.now());
 
     final pickedTime = await showTimePicker(
@@ -1492,25 +1689,69 @@ class _EditDailyDetailsDialogState
       );
       setState(() {
         if (isInTime) {
-          _inTime = newDateTime;
+          _sessions[index] = AttendanceSession(
+            inTime: newDateTime,
+            outTime: session.outTime,
+          );
         } else {
-          _outTime = newDateTime;
+          _sessions[index] = AttendanceSession(
+            inTime: session.inTime,
+            outTime: newDateTime,
+          );
         }
       });
     }
   }
 
+  void _addSession() {
+    setState(() {
+      _sessions.add(
+        AttendanceSession(
+          inTime: DateTime(
+            widget.log.date.year,
+            widget.log.date.month,
+            widget.log.date.day,
+            DateTime.now().hour,
+            DateTime.now().minute,
+          ),
+        ),
+      );
+    });
+  }
+
+  void _removeSession(int index) {
+    setState(() {
+      _sessions.removeAt(index);
+    });
+  }
+
   Future<void> _save() async {
     try {
-      if (_inTime != null && _outTime != null) {
-        if (_outTime!.isBefore(_inTime!)) {
+      if (_sessions.isEmpty) {
+        AppTheme.showErrorSnackBar(
+          context,
+          'You must have at least one session.',
+        );
+        return;
+      }
+
+      for (var i = 0; i < _sessions.length; i++) {
+        final session = _sessions[i];
+        if (session.outTime != null &&
+            session.outTime!.isBefore(session.inTime)) {
           AppTheme.showErrorSnackBar(
             context,
-            'Check-out time cannot be earlier than check-in time.',
+            'Session ${i + 1}: Check-out time cannot be earlier than check-in time.',
           );
           return;
         }
       }
+
+      // Sort sessions by inTime
+      _sessions.sort((a, b) => a.inTime.compareTo(b.inTime));
+
+      DateTime? overallInTime = _sessions.first.inTime;
+      DateTime? overallOutTime = _sessions.last.outTime;
 
       final updatedLog = AttendanceLog(
         id: widget.log.id,
@@ -1519,8 +1760,9 @@ class _EditDailyDetailsDialogState
         timestamp: widget.log.timestamp,
         isSynced: widget.log.isSynced,
         method: 'manual', // Overriding method to reflect user intervention
-        inTime: _inTime,
-        outTime: _outTime,
+        inTime: overallInTime,
+        outTime: overallOutTime,
+        sessions: _sessions,
       );
       await ref.read(attendanceServiceProvider)?.updateAttendance(updatedLog);
       await refreshSmartNotifications(ref);
@@ -1534,55 +1776,127 @@ class _EditDailyDetailsDialogState
     }
   }
 
-  Widget _buildTimeTile({
-    required String title,
-    required DateTime? time,
-    required bool isLogin,
-  }) {
+  Widget _buildSessionTile(int index, AttendanceSession session) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        title: Text(
-          title,
-          style: TextStyle(color: Colors.grey[400], fontSize: 14),
-        ),
-        subtitle: Text(
-          time != null ? DateFormat('hh:mm a').format(time) : '--:--',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Session ${index + 1}',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (index > 0) // Cannot delete the very first session
+                IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: AppTheme.dangerColor,
+                    size: 20,
+                  ),
+                  onPressed: () => _removeSession(index),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  splashRadius: 20,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildTimePickerBox(
+                  title: 'In Time',
+                  time: session.inTime,
+                  onTap: () => _pickTime(index, true),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildTimePickerBox(
+                  title: 'Out Time',
+                  time: session.outTime,
+                  onTap: () => _pickTime(index, false),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimePickerBox({
+    required String title,
+    required DateTime? time,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardTheme.color,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
           ),
         ),
-        trailing: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppTheme.logGradientStart.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(
-            Icons.edit,
-            color: AppTheme.logGradientStart,
-            size: 20,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  time != null ? DateFormat('hh:mm a').format(time) : '--:--',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Icon(
+                  Icons.edit,
+                  size: 14,
+                  color: AppTheme.logGradientStart.withValues(alpha: 0.7),
+                ),
+              ],
+            ),
+          ],
         ),
-        onTap: () => _pickTime(isLogin),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Determine height based on number of sessions, up to a max
+    final double maxDialogHeight = MediaQuery.of(context).size.height * 0.7;
+
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: Container(
         padding: const EdgeInsets.all(24),
+        constraints: BoxConstraints(maxHeight: maxDialogHeight),
         decoration: BoxDecoration(
           color: Theme.of(context).cardTheme.color,
           borderRadius: BorderRadius.circular(24),
@@ -1605,26 +1919,45 @@ class _EditDailyDetailsDialogState
                 size: 32,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             // Title
-            Text(
-              'Edit Daily Details',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Edit Sessions',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _addSession,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.logGradientStart,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Content List
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _sessions.length,
+                itemBuilder: (context, index) {
+                  return _buildSessionTile(index, _sessions[index]);
+                },
               ),
             ),
             const SizedBox(height: 24),
-            // Content
-            _buildTimeTile(title: 'Login Time', time: _inTime, isLogin: true),
-            const SizedBox(height: 12),
-            _buildTimeTile(
-              title: 'Log Out Time',
-              time: _outTime,
-              isLogin: false,
-            ),
-            const SizedBox(height: 32),
             // Save Button
             SizedBox(
               width: double.infinity,

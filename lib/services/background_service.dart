@@ -1,98 +1,95 @@
-import 'package:workmanager/workmanager.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:native_geofence/native_geofence.dart';
 
 import '../presentation/providers/providers.dart';
 import 'auto_checkin_service.dart';
 import 'notification_service.dart';
 import 'logger_service.dart';
+import 'attendance_service.dart';
+import 'admin_service.dart';
 
 @pragma('vm:entry-point')
-void callbackDispatcher() {
-  Workmanager().executeTask((task, inputData) async {
-    LoggerService.instance.info('BackgroundService: executing task $task');
+Future<void> geofenceTriggered(GeofenceCallbackParams params) async {
+  print('NATIVE_GEOFENCE_ISOLATE: CALLBACK INVOKED BY OS');
+  WidgetsFlutterBinding.ensureInitialized();
+  // Raw print for OS level verification
+  print('NATIVE_GEOFENCE_ISOLATE: Received event=${params.event.name}');
 
-    // Helper to log persistent background events
+  try {
+    // 1. Initialize Hive FIRST (required by LoggerService which is used by NotificationService)
+    await Hive.initFlutter();
+
+    // 2. Initialize necessary core services
+    await Firebase.initializeApp();
+    AttendanceService.initializeSettings();
+
+    // 3. Initialize NotificationService (now safe because Hive is ready)
+    await NotificationService.init();
+
+    print('NATIVE_GEOFENCE_ISOLATE: Core services initialized.');
+
+    final prefs = await SharedPreferences.getInstance();
+
+    final container = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    );
+
+    // Wait for config and auth
+    print('NATIVE_GEOFENCE_ISOLATE: Waiting for config and auth...');
     try {
-      // Initialize necessary services
-      await Firebase.initializeApp();
-      await Hive.initFlutter();
-      LoggerService.instance.background('Task started: $task');
-      await NotificationService.init();
+      await container
+          .read(globalConfigProvider.future)
+          .timeout(const Duration(seconds: 20));
+      print('NATIVE_GEOFENCE_ISOLATE: Config ready.');
 
-      final prefs = await SharedPreferences.getInstance();
-
-      // We need a temporary container to use our providers
-      final container = ProviderContainer(
-        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
-      );
-
-      // Trigger the check-in logic
-      await container.read(autoCheckInServiceProvider).checkAndLogAttendance();
-
-      LoggerService.instance.background('Task completed successfully');
-
-      // Cleanup
-      container.dispose();
-
-      return true;
-    } catch (e, stack) {
-      try {
-        await Hive.initFlutter();
-        LoggerService.instance.error(
-          'BackgroundService: error executing task $task: $e\n$stack',
-        );
-      } catch (_) {}
-      return false;
+      await container
+          .read(authStateProvider.future)
+          .timeout(const Duration(seconds: 20));
+      print('NATIVE_GEOFENCE_ISOLATE: Auth ready.');
+    } catch (e) {
+      print('NATIVE_GEOFENCE_ISOLATE: Timeout/Error waiting for state: $e');
+      // We continue anyway, as the service might handle nulls safely or use fallbacks
     }
-  });
+
+    final autoCheckInService = container.read(autoCheckInServiceProvider);
+
+    if (params.event == GeofenceEvent.enter ||
+        params.event == GeofenceEvent.dwell) {
+      await autoCheckInService.checkAndLogAttendance();
+    } else if (params.event == GeofenceEvent.exit) {
+      await autoCheckInService.checkAndLogOutAttendance();
+    }
+
+    print('NATIVE_GEOFENCE_ISOLATE: GeofenceTriggered: Handle complete.');
+    container.dispose();
+  } catch (e, stack) {
+    print('NATIVE_GEOFENCE_ISOLATE CRITICAL ERROR: $e\n$stack');
+    try {
+      await Hive.initFlutter();
+      print(
+        'GeofenceTriggered ERROR written to console implicitly: $e\n$stack',
+      );
+    } catch (_) {}
+  }
 }
 
 class BackgroundService {
   static Future<void> init(ProviderContainer container) async {
-    await Workmanager().initialize(callbackDispatcher);
-
-    // Initialize Geofencing
     try {
+      await NativeGeofenceManager.instance.initialize();
       await container.read(autoCheckInServiceProvider).initGeofence();
     } catch (e) {
       LoggerService.instance.error(
-        'BackgroundService: Failed to init geofence: $e',
+        'BackgroundService: Failed to init geofence runtime: $e',
       );
     }
-
-    LoggerService.instance.info('BackgroundService: initialized');
   }
 
-  static Future<void> registerPeriodicTask() async {
-    await Workmanager().registerPeriodicTask(
-      'autoCheckInTask', // Unique name
-      'autoCheckIn', // Task name to identify in dispatcher
-      frequency: const Duration(minutes: 15),
-      constraints: Constraints(networkType: NetworkType.connected),
-      existingWorkPolicy: ExistingPeriodicWorkPolicy
-          .update, // Ensure settings are updated on registration
-    );
-    LoggerService.instance.info(
-      'BackgroundService: periodic task registered (keep policy)',
-    );
-  }
-
-  /// Automatically registers the background task if location permission is granted
   static Future<void> checkAndRegisterTask() async {
-    var status = await Permission.locationAlways.status;
-    if (status.isGranted) {
-      LoggerService.instance.info(
-        'BackgroundService: LocationAlways granted, autonomously registering task on startup.',
-      );
-      await registerPeriodicTask();
-    } else {
-      LoggerService.instance.info(
-        'BackgroundService: LocationAlways not granted, skipping auto-registration.',
-      );
-    }
+    // No-op for backwards compatibility during refactor, Native Geofencing handles persistence via OS.
   }
 }
