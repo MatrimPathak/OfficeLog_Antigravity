@@ -2,6 +2,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/theme/app_theme.dart';
 
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
@@ -16,8 +17,6 @@ import '../summary/summary_screen.dart';
 import '../../services/auto_checkin_service.dart';
 import '../../services/notification_service.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:geolocator/geolocator.dart';
-
 import '../../services/admin_service.dart';
 import 'widgets/delete_attendance_dialog.dart';
 import 'package:native_geofence/native_geofence.dart';
@@ -1523,7 +1522,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildDebugLocationInfo() {
+    final prefs = ref.watch(sharedPreferencesProvider);
     final allowMockLocation =
+        prefs.getBool('allowMockLocation') ??
         ref.watch(globalConfigProvider).value?['allowMockLocation'] == true;
 
     if (!allowMockLocation) return const SizedBox.shrink();
