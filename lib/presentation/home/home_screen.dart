@@ -1523,6 +1523,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildDebugLocationInfo() {
+    final allowMockLocation =
+        ref.watch(globalConfigProvider).value?['allowMockLocation'] == true;
+
+    if (!allowMockLocation) return const SizedBox.shrink();
+
     final userProfile = ref.watch(userProfileProvider).value;
     if (userProfile == null) return const SizedBox.shrink();
 
