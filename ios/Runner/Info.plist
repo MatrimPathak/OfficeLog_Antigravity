@@ -108,6 +108,7 @@
 				<string>com.googleusercontent.apps.523308480966-j01j1hkm0nlbs75n0i7l536fneq48sds</string>
 			</array>
 		</dict>
+	</array>
 	<key>GMSApiKey</key>
 	<string>$(MAPS_API_KEY)</string>
 </dict>
