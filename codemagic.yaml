@@ -41,6 +41,12 @@ workflows:
           echo "keyAlias=$KEY_ALIAS" >> android/key.properties
           echo "storeFile=officelog-release-key.jks" >> android/key.properties
 
+          # Reconstruct local.properties for API keys
+          echo "MAPS_API_KEY=$MAPS_API_KEY" > android/local.properties
+
+          # Reconstruct Secrets.xcconfig for iOS API keys
+          echo "MAPS_API_KEY=$MAPS_API_KEY" > ios/Flutter/Secrets.xcconfig
+
           # Fix Windows line endings
           tr -d '\r' < pubspec.yaml > pubspec.yaml.tmp && mv pubspec.yaml.tmp pubspec.yaml
 
