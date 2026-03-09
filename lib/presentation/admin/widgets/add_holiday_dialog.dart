@@ -4,12 +4,27 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../services/admin_service.dart';
 import '../../../data/models/holiday.dart';
+import '../../shared/widgets/app_date_picker.dart';
 
 class AddHolidayDialog extends StatefulWidget {
   final WidgetRef ref;
   final Holiday? holiday;
+  final void Function(
+    String name,
+    DateTime date,
+    bool isRecurring,
+    List<String> offices,
+  )?
+  onSave;
+  final bool isCustomHoliday;
 
-  const AddHolidayDialog({super.key, required this.ref, this.holiday});
+  const AddHolidayDialog({
+    super.key,
+    required this.ref,
+    this.holiday,
+    this.onSave,
+    this.isCustomHoliday = false,
+  });
 
   @override
   State<AddHolidayDialog> createState() => _AddHolidayDialogState();
@@ -90,21 +105,12 @@ class _AddHolidayDialogState extends State<AddHolidayDialog> {
               const SizedBox(height: 8),
               InkWell(
                 onTap: () async {
-                  final picked = await showDatePicker(
+                  final picked = await AppDatePicker.show(
                     context: context,
                     initialDate: selectedDate,
                     firstDate: DateTime(2000),
                     lastDate: DateTime(2100),
-                    builder: (context, child) {
-                      return Theme(
-                        data: Theme.of(context).copyWith(
-                          colorScheme: Theme.of(context).colorScheme.copyWith(
-                            primary: AppTheme.primaryColor,
-                          ),
-                        ),
-                        child: child!,
-                      );
-                    },
+                    title: 'Select Holiday Date',
                   );
                   if (picked != null) {
                     setState(() => selectedDate = picked);
@@ -142,131 +148,136 @@ class _AddHolidayDialogState extends State<AddHolidayDialog> {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              Text(
-                'OFFICE LOCATION',
-                style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
+              if (!widget.isCustomHoliday) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'OFFICE LOCATION',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Consumer(
-                builder: (context, ref, child) {
-                  final locationsAsync = ref.watch(officeLocationsProvider);
+                const SizedBox(height: 8),
+                Consumer(
+                  builder: (context, ref, child) {
+                    final locationsAsync = ref.watch(officeLocationsProvider);
 
-                  return locationsAsync.when(
-                    data: (locations) {
-                      final List<String> officeNames = [
-                        'All Offices',
-                        ...locations.map((e) => e.name),
-                      ];
+                    return locationsAsync.when(
+                      data: (locations) {
+                        final List<String> officeNames = [
+                          'All Offices',
+                          ...locations.map((e) => e.name),
+                        ];
 
-                      return Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: officeNames.map((officeName) {
-                          final isSelected = _selectedOffices.contains(
-                            officeName,
-                          );
-                          return FilterChip(
-                            label: Text(officeName),
-                            selected: isSelected,
-                            onSelected: (bool selected) {
-                              setState(() {
-                                if (officeName == 'All Offices') {
-                                  if (selected) {
-                                    _selectedOffices = ['All Offices'];
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: officeNames.map((officeName) {
+                            final isSelected = _selectedOffices.contains(
+                              officeName,
+                            );
+                            return FilterChip(
+                              label: Text(officeName),
+                              selected: isSelected,
+                              onSelected: (bool selected) {
+                                setState(() {
+                                  if (officeName == 'All Offices') {
+                                    if (selected) {
+                                      _selectedOffices = ['All Offices'];
+                                    } else {
+                                      _selectedOffices.remove('All Offices');
+                                    }
                                   } else {
-                                    _selectedOffices.remove('All Offices');
+                                    if (selected) {
+                                      _selectedOffices.remove('All Offices');
+                                      _selectedOffices.add(officeName);
+                                    } else {
+                                      _selectedOffices.remove(officeName);
+                                    }
+                                    if (_selectedOffices.isEmpty) {
+                                      _selectedOffices = ['All Offices'];
+                                    }
                                   }
-                                } else {
-                                  if (selected) {
-                                    _selectedOffices.remove('All Offices');
-                                    _selectedOffices.add(officeName);
-                                  } else {
-                                    _selectedOffices.remove(officeName);
-                                  }
-                                  if (_selectedOffices.isEmpty) {
-                                    _selectedOffices = ['All Offices'];
-                                  }
-                                }
-                              });
-                            },
-                            selectedColor: AppTheme.primaryColor.withValues(
-                              alpha: 0.2,
-                            ),
-                            checkmarkColor: AppTheme.primaryColor,
-                            labelStyle: TextStyle(
-                              color: isSelected
-                                  ? AppTheme.primaryColor
-                                  : Theme.of(context).colorScheme.onSurface,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                            ),
-                            backgroundColor:
-                                Theme.of(context).brightness == Brightness.dark
-                                ? const Color(0xFF1A2230)
-                                : Colors.grey[200],
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              side: BorderSide(
+                                });
+                              },
+                              selectedColor: AppTheme.primaryColor.withValues(
+                                alpha: 0.2,
+                              ),
+                              checkmarkColor: AppTheme.primaryColor,
+                              labelStyle: TextStyle(
                                 color: isSelected
                                     ? AppTheme.primaryColor
-                                    : Colors.transparent,
+                                    : Theme.of(context).colorScheme.onSurface,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
                               ),
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    },
-                    loading: () => const Center(
-                      child: CircularProgressIndicator.adaptive(),
-                    ),
-                    error: (err, stack) =>
-                        Text('Error loading locations: $err'),
-                  );
-                },
-              ),
-              const SizedBox(height: 24),
-              Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xFF1A2230)
-                      : Colors.grey[200],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: SwitchListTile(
-                  title: Text(
-                    'Recurring Yearly',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Holiday repeats on this day every year',
-                    style: TextStyle(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.6),
-                      fontSize: 12,
-                    ),
-                  ),
-                  value: _isRecurring,
-                  activeThumbColor: AppTheme.primaryColor,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  onChanged: (bool value) {
-                    setState(() {
-                      _isRecurring = value;
-                    });
+                              backgroundColor:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? const Color(0xFF1A2230)
+                                  : Colors.grey[200],
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: BorderSide(
+                                  color: isSelected
+                                      ? AppTheme.primaryColor
+                                      : Colors.transparent,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      },
+                      loading: () => const Center(
+                        child: CircularProgressIndicator.adaptive(),
+                      ),
+                      error: (err, stack) =>
+                          Text('Error loading locations: $err'),
+                    );
                   },
                 ),
-              ),
+              ],
+              if (!widget.isCustomHoliday) ...[
+                const SizedBox(height: 24),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF1A2230)
+                        : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: SwitchListTile(
+                    title: Text(
+                      'Recurring Yearly',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Holiday repeats on this day every year',
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        fontSize: 12,
+                      ),
+                    ),
+                    value: _isRecurring,
+                    activeThumbColor: AppTheme.primaryColor,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    onChanged: (bool value) {
+                      setState(() {
+                        _isRecurring = value;
+                      });
+                    },
+                  ),
+                ),
+              ],
               const SizedBox(height: 32),
               Row(
                 children: [
@@ -287,29 +298,38 @@ class _AddHolidayDialogState extends State<AddHolidayDialog> {
                     child: ElevatedButton(
                       onPressed: () {
                         if (nameController.text.isNotEmpty) {
-                          if (widget.holiday != null) {
-                            widget.ref
-                                .read(adminServiceProvider)
-                                .updateHoliday(
-                                  widget.holiday!.id,
-                                  selectedDate,
-                                  nameController.text,
-                                  _selectedOffices.isEmpty
-                                      ? null
-                                      : _selectedOffices,
-                                  _isRecurring,
-                                );
+                          if (widget.onSave != null) {
+                            widget.onSave!(
+                              nameController.text,
+                              selectedDate,
+                              _isRecurring,
+                              _selectedOffices,
+                            );
                           } else {
-                            widget.ref
-                                .read(adminServiceProvider)
-                                .addHoliday(
-                                  selectedDate,
-                                  nameController.text,
-                                  _selectedOffices.isEmpty
-                                      ? null
-                                      : _selectedOffices,
-                                  _isRecurring,
-                                );
+                            if (widget.holiday != null) {
+                              widget.ref
+                                  .read(adminServiceProvider)
+                                  .updateHoliday(
+                                    widget.holiday!.id,
+                                    selectedDate,
+                                    nameController.text,
+                                    _selectedOffices.isEmpty
+                                        ? null
+                                        : _selectedOffices,
+                                    _isRecurring,
+                                  );
+                            } else {
+                              widget.ref
+                                  .read(adminServiceProvider)
+                                  .addHoliday(
+                                    selectedDate,
+                                    nameController.text,
+                                    _selectedOffices.isEmpty
+                                        ? null
+                                        : _selectedOffices,
+                                    _isRecurring,
+                                  );
+                            }
                           }
                           Navigator.pop(context);
                         }

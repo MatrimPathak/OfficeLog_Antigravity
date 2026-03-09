@@ -45,6 +45,35 @@ class AdminService {
     await _firestore.collection('holidays').doc(id).delete();
   }
 
+  Future<void> batchAddHolidays(List<Holiday> holidays) async {
+    // Firestore batches have a limit of 500 writes per batch
+    final batchSize = 500;
+
+    for (int i = 0; i < holidays.length; i += batchSize) {
+      final batch = _firestore.batch();
+      final end = (i + batchSize < holidays.length)
+          ? i + batchSize
+          : holidays.length;
+      final currentBatch = holidays.sublist(i, end);
+
+      for (final holiday in currentBatch) {
+        final docRef = _firestore.collection('holidays').doc();
+
+        final newHoliday = Holiday(
+          id: docRef.id,
+          date: holiday.date,
+          name: holiday.name,
+          officeLocations: holiday.officeLocations,
+          isRecurring: holiday.isRecurring,
+        );
+
+        batch.set(docRef, newHoliday.toMap());
+      }
+
+      await batch.commit();
+    }
+  }
+
   Stream<List<Holiday>> getHolidaysStream() {
     return _firestore.collection('holidays').orderBy('date').snapshots().map((
       snapshot,
@@ -139,13 +168,42 @@ class AdminService {
 
 final adminServiceProvider = Provider<AdminService>((ref) => AdminService());
 
-final sortedHolidaysProvider = StreamProvider<List<Holiday>>((ref) {
-  return ref.watch(adminServiceProvider).getHolidaysStream().map((holidays) {
-    holidays.sort((a, b) {
-      return a.date.compareTo(b.date);
-    });
-    return holidays;
-  });
+final globalHolidaysStreamProvider = StreamProvider<List<Holiday>>((ref) {
+  return ref.watch(adminServiceProvider).getHolidaysStream();
+});
+
+final sortedHolidaysProvider = Provider<AsyncValue<List<Holiday>>>((ref) {
+  final globalAsync = ref.watch(globalHolidaysStreamProvider);
+  final userProfileAsync = ref.watch(userProfileProvider);
+
+  return globalAsync.when(
+    data: (globalHolidays) {
+      final customHolidays = userProfileAsync.value?.customHolidays ?? [];
+      final allHolidays = [...globalHolidays, ...customHolidays];
+
+      allHolidays.sort((a, b) => a.date.compareTo(b.date));
+      return AsyncValue.data(allHolidays);
+    },
+    loading: () => const AsyncValue.loading(),
+    error: (err, stack) => AsyncValue.error(err, stack),
+  );
+});
+
+final userSelectedHolidaysProvider = Provider<AsyncValue<List<Holiday>>>((ref) {
+  final sortedAsync = ref.watch(sortedHolidaysProvider);
+  final userProfileAsync = ref.watch(userProfileProvider);
+
+  return sortedAsync.when(
+    data: (allHolidays) {
+      final selectedIds = userProfileAsync.value?.selectedHolidays ?? [];
+      final filtered = allHolidays
+          .where((h) => selectedIds.contains(h.id))
+          .toList();
+      return AsyncValue.data(filtered);
+    },
+    loading: () => const AsyncValue.loading(),
+    error: (err, stack) => AsyncValue.error(err, stack),
+  );
 });
 
 final usersStreamProvider = StreamProvider<List<UserProfile>>((ref) {
@@ -157,21 +215,18 @@ final holidaysStreamProvider = StreamProvider<List<DateTime>>((ref) {
   final userProfileAsync = ref.watch(userProfileProvider);
 
   return adminService.getHolidaysStream().map((list) {
-    final userOffice = userProfileAsync.value?.officeLocation;
+    final selectedHolidays = userProfileAsync.value?.selectedHolidays;
+    final customHolidays = userProfileAsync.value?.customHolidays ?? [];
 
-    return list
+    // Prepend user's custom holidays so they are evaluated with the rest
+    final mergedList = [...customHolidays, ...list];
+
+    return mergedList
         .where((holiday) {
-          final offices = holiday.officeLocations;
-
-          if (offices.isEmpty || offices.contains('All Offices')) {
-            return true;
+          if (selectedHolidays != null) {
+            return selectedHolidays.contains(holiday.id);
           }
-
-          if (userOffice != null && offices.contains(userOffice)) {
-            return true;
-          }
-
-          return false;
+          return false; // Default: none selected until user explicitly saves
         })
         .expand<DateTime>((holiday) {
           final date = holiday.date;

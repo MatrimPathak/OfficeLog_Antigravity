@@ -98,6 +98,30 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>https</string>
+		<string>http</string>
+		<string>mailto</string>
+		<string>tel</string>
+		<string>sms</string>
+		<string>comgooglemaps</string>
+		<string>iosamaps</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>location</string>
+		<string>remote-notification</string>
+	</array>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>This app needs access to location when in the background to track attendance within the office geofence.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app may require camera access for profile picture updates.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app may require photo library access for profile picture updates.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app may require microphone access for video-based verification features.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

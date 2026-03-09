@@ -11,6 +11,12 @@ import GoogleMaps
   ) -> Bool {
     let mapsApiKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String ?? ""
     GMSServices.provideAPIKey(mapsApiKey)
+    
+    // Register for foreground notifications
+    if #available(iOS 10.0, *) {
+      UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
+    }
+
     // Used by plugin: native_geofence
     NativeGeofencePlugin.setPluginRegistrantCallback { registry in
         GeneratedPluginRegistrant.register(with: registry)

@@ -30,7 +30,7 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+build/
 /coverage/
 
 # Symbolication related
@@ -54,6 +54,7 @@ android/signing_report.txt
 
 # Temporary/Investigation Files
 *.txt
-snackbar_verify.txt
-snackbar_search.txt
-analysis_output.txt
+*.log
+*.ics
+analyze*.txt
+build_error*.log

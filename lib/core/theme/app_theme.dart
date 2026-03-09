@@ -120,6 +120,34 @@ class AppTheme {
         ),
         margin: EdgeInsets.zero,
       ),
+      timePickerTheme: TimePickerThemeData(
+        backgroundColor: surfaceDark,
+        hourMinuteShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: cardBorderDark),
+        ),
+        dayPeriodShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: cardBorderDark),
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: scaffoldBgDark,
+          contentPadding: const EdgeInsets.all(0),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: surfaceDark,
+        headerBackgroundColor: primaryColor,
+        headerForegroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        dayStyle: GoogleFonts.inter(),
+      ),
     );
   }
 
@@ -199,6 +227,34 @@ class AppTheme {
           side: const BorderSide(color: cardBorderLight),
         ),
         margin: EdgeInsets.zero,
+      ),
+      timePickerTheme: TimePickerThemeData(
+        backgroundColor: surfaceLight,
+        hourMinuteShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: cardBorderLight),
+        ),
+        dayPeriodShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: cardBorderLight),
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: scaffoldBgLight,
+          contentPadding: const EdgeInsets.all(0),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: surfaceLight,
+        headerBackgroundColor: primaryColor,
+        headerForegroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        dayStyle: GoogleFonts.inter(),
       ),
     );
   }

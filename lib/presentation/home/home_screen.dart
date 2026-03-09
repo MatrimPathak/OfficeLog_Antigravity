@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../providers/providers.dart';
 import '../../data/models/attendance_log.dart';
+import '../../data/models/holiday.dart';
 import '../../logic/stats_calculator.dart';
 
 import '../settings/settings_screen.dart';
@@ -18,6 +19,7 @@ import '../../services/auto_checkin_service.dart';
 import '../../services/notification_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../services/admin_service.dart';
+import '../shared/widgets/app_time_picker.dart';
 import 'widgets/delete_attendance_dialog.dart';
 import 'package:native_geofence/native_geofence.dart';
 
@@ -43,6 +45,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
       final autoService = ref.read(autoCheckInServiceProvider);
       await autoService.initGeofence();
+      // Proactively check attendance state on startup/resume
+      await autoService.checkAndLogAttendance();
 
       // Debug: Log registered geofences to console
       try {
@@ -75,6 +79,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final user = ref.watch(currentUserProvider);
     final currentYear = _focusedDay.year;
     final globalConfig = ref.watch(globalConfigProvider).value ?? {};
+    final userSelectedHolidaysAsync = ref.watch(userSelectedHolidaysProvider);
     final calculateAsWorking =
         globalConfig['calculateHolidayAsWorking'] ?? false;
 
@@ -153,10 +158,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 24),
                   // Daily Details
                   _buildDailyDetailsCard(attendanceLogs),
-                  if (attendanceLogs.any(
-                    (log) => isSameDay(log.date, _selectedDay),
-                  ))
-                    const SizedBox(height: 24),
+                  const SizedBox(height: 24),
+
+                  // Info Card (New Position)
+                  userSelectedHolidaysAsync.when(
+                    data: (holidays) =>
+                        _buildInfoCard(attendanceLogs, holidays),
+                    loading: () => _buildInfoCard(attendanceLogs, []),
+                    error: (_, __) => _buildInfoCard(attendanceLogs, []),
+                  ),
+                  const SizedBox(height: 24),
 
                   // Stats Section
                   _buildStatisticsGrid(
@@ -167,7 +178,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Info Card
+                  // Yearly Progress Card
                   yearlyLogsAsync.when(
                     data: (yearlyLogs) {
                       final stats = YearlyCalculator.calculateYearlyStats(
@@ -176,17 +187,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         holidays: holidaysAsync.value ?? [],
                         calculateHolidayAsWorking: calculateAsWorking,
                       );
-                      return Column(
-                        children: [
-                          _buildProgressCard(context, stats),
-                          const SizedBox(height: 24),
-                          if (isSameDay(_selectedDay, DateTime.now()))
-                            _buildInfoCard(
-                              attendanceLogs,
-                              holidaysAsync.value ?? [],
-                            ),
-                        ],
-                      );
+                      return _buildProgressCard(context, stats);
                     },
                     loading: () => const SizedBox.shrink(),
                     error: (_, __) => const SizedBox.shrink(),
@@ -656,10 +657,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     for (var log in logs) {
       if (log.date.year == displayDate.year &&
           log.date.month == displayDate.month) {
-        if (log.inTime != null && log.outTime != null) {
-          final duration = log.outTime!.difference(log.inTime!);
-          dailyHours[log.date.day] = duration.inMinutes / 60.0;
+        double totalHours = 0;
+        for (var session in log.sessions) {
+          if (session.outTime != null) {
+            totalHours +=
+                session.outTime!.difference(session.inTime).inMinutes / 60.0;
+          }
         }
+        dailyHours[log.date.day] = totalHours;
       }
     }
 
@@ -676,116 +681,191 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
-      child: BarChart(
-        BarChartData(
-          gridData: const FlGridData(show: false),
-          titlesData: FlTitlesData(
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 30,
-                interval: 2,
-                getTitlesWidget: (value, meta) {
-                  return Text(
-                    value.toInt().toString(),
-                    style: const TextStyle(color: Colors.grey, fontSize: 10),
-                  );
-                },
-              ),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                interval: 5,
-                getTitlesWidget: (value, meta) {
-                  if (value > 0 && value <= daysInMonth) {
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        value.toInt().toString(),
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 10,
-                        ),
-                      ),
-                    );
-                  }
-                  return const Text('');
-                },
+      child: Row(
+        children: [
+          // Fixed Y-Axis
+          SizedBox(
+            width: 32,
+            child: BarChart(
+              BarChartData(
+                gridData: const FlGridData(show: false),
+                titlesData: FlTitlesData(
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 30,
+                      interval: 2,
+                      getTitlesWidget: (value, meta) {
+                        return Text(
+                          value.toInt().toString(),
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 10,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  bottomTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: [],
+                maxY: maxY,
               ),
             ),
           ),
-          borderData: FlBorderData(show: false),
-          barGroups: dailyHours.entries.map((e) {
-            return BarChartGroupData(
-              x: e.key,
-              barRods: [
-                BarChartRodData(
-                  toY: e.value,
-                  color: AppTheme.primaryColor,
-                  width: 8,
-                  borderRadius: BorderRadius.circular(2),
-                  backDrawRodData: BackgroundBarChartRodData(
-                    show: true,
-                    toY: maxY,
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF1A2230)
-                        : Colors.grey.shade200,
+          // Scrollable Chart Content
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: daysInMonth * 30.0, // Dynamic width for scrollability
+                child: BarChart(
+                  BarChartData(
+                    gridData: const FlGridData(show: false),
+                    titlesData: FlTitlesData(
+                      leftTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: 1,
+                          getTitlesWidget: (value, meta) {
+                            final intVal = value.toInt();
+                            if (intVal > 0 && intVal <= daysInMonth) {
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                  intVal.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        ),
+                      ),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    barGroups: dailyHours.entries.map((e) {
+                      return BarChartGroupData(
+                        x: e.key,
+                        barRods: [
+                          BarChartRodData(
+                            toY: e.value,
+                            color: AppTheme.primaryColor,
+                            width: 10,
+                            borderRadius: BorderRadius.circular(2),
+                            backDrawRodData: BackgroundBarChartRodData(
+                              show: true,
+                              toY: maxY,
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? const Color(0xFF1A2230)
+                                  : Colors.grey.shade200,
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                    maxY: maxY,
+                    groupsSpace: 8,
                   ),
                 ),
-              ],
-            );
-          }).toList(),
-          maxY: maxY,
-        ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildInfoCard(List<AttendanceLog> logs, List<DateTime> holidays) {
+  Widget _buildInfoCard(List<AttendanceLog> logs, List<Holiday> holidays) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final isWeekend =
-        now.weekday == DateTime.saturday || now.weekday == DateTime.sunday;
-    final isHoliday = holidays.any((h) => isSameDay(h, today));
-    final isLogged = logs.any((log) => isSameDay(log.date, today));
+    final isSelectedToday = isSameDay(_selectedDay, today);
 
-    String title = 'Today is ${DateFormat('MMMM d').format(now)}';
-    String message = 'Don\'t forget to log your attendance.';
+    // Check if the selected day is a weekend
+    final isWeekend =
+        _selectedDay.weekday == DateTime.saturday ||
+        _selectedDay.weekday == DateTime.sunday;
+
+    // Check if the selected day is a holiday
+    Holiday? holiday;
+    try {
+      holiday = holidays.firstWhere((h) => isSameDay(h.date, _selectedDay));
+    } catch (_) {}
+
+    final isHoliday = holiday != null;
+    final isLogged = logs.any((log) => isSameDay(log.date, _selectedDay));
+
+    String title = isSelectedToday
+        ? 'Today is ${DateFormat('MMMM d').format(now)}'
+        : DateFormat('MMMM d, yyyy').format(_selectedDay);
+    String message = isSelectedToday
+        ? 'Don\'t forget to log your attendance.'
+        : 'No attendance records for this day.';
     IconData icon = Icons.info_outline;
     Color iconBgColor = Colors.blueAccent;
 
     if (isHoliday) {
-      title = 'Public Holiday';
-      message = 'Enjoy your holiday! No attendance logging required today.';
+      title = holiday.name;
+      message = isSelectedToday
+          ? 'Enjoy your holiday! No attendance logging required today.'
+          : 'This was a public holiday. No attendance logging was required.';
       icon = Icons.celebration;
       iconBgColor = Colors.orangeAccent;
     } else if (isWeekend) {
       title = 'It\'s the Weekend';
-      message = 'Have a great weekend! See you on Monday.';
+      message = isSelectedToday
+          ? 'Have a great weekend! See you on Monday.'
+          : 'This was a weekend. Time to rest!';
       icon = Icons.weekend;
       iconBgColor = Colors.purpleAccent;
     } else if (isLogged) {
       title = 'Attendance Logged';
-      message = 'Great job! Your attendance for today is already recorded.';
+      message = isSelectedToday
+          ? 'Great job! Your attendance for today is already recorded.'
+          : 'Your attendance for this day was successfully recorded.';
       icon = Icons.check_circle_outline;
       iconBgColor = Colors.greenAccent;
     } else {
-      final sixPM = DateTime(now.year, now.month, now.day, 18, 0);
-      if (now.isAfter(sixPM)) {
-        title = 'Late Log Alert';
-        message =
-            'It\'s past 6:00 PM. Please log your attendance as soon as possible.';
-        icon = Icons.warning_amber_rounded;
-        iconBgColor = Colors.redAccent;
+      if (isSelectedToday) {
+        final sixPM = DateTime(now.year, now.month, now.day, 18, 0);
+        if (now.isAfter(sixPM)) {
+          title = 'Late Log Alert';
+          message =
+              'It\'s past 6:00 PM. Please log your attendance as soon as possible.';
+          icon = Icons.warning_amber_rounded;
+          iconBgColor = Colors.redAccent;
+        }
+      } else if (_selectedDay.isBefore(today)) {
+        title = 'Missing Attendance';
+        message = 'You didn\'t log your attendance for this workday.';
+        icon = Icons.error_outline;
+        iconBgColor = AppTheme.dangerColor;
       }
     }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -927,7 +1007,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .toList();
     final isDayLogged = dayLogs.isNotEmpty;
     final todayLog = isDayLogged ? dayLogs.first : null;
-    final needsCheckout = isDayLogged && todayLog!.outTime == null;
+    final needsCheckout =
+        isDayLogged &&
+        todayLog!.sessions.isNotEmpty &&
+        todayLog.sessions.last.outTime == null;
 
     Widget? mainButton;
     if (!isDayLogged || needsCheckout) {
@@ -1058,10 +1141,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ? TimeOfDay.now()
         : const TimeOfDay(hour: 18, minute: 0);
 
-    final TimeOfDay? pickedTime = await showTimePicker(
+    final TimeOfDay? pickedTime = await AppTimePicker.show(
       context: context,
       initialTime: initialTime,
-      helpText: 'Select Log Out Time',
+      title: 'Select Log Out Time',
     );
 
     if (pickedTime == null) return;
@@ -1083,10 +1166,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         );
       } else {
         sessions.add(
-          AttendanceSession(
-            inTime: todayLog.inTime ?? todayLog.timestamp,
-            outTime: checkoutTime,
-          ),
+          AttendanceSession(inTime: todayLog.timestamp, outTime: checkoutTime),
         );
       }
 
@@ -1097,8 +1177,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         timestamp: todayLog.timestamp,
         isSynced: todayLog.isSynced,
         method: todayLog.method,
-        inTime: todayLog.inTime,
-        outTime: checkoutTime,
         sessions: sessions,
       );
 
@@ -1123,10 +1201,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ? TimeOfDay.now()
         : const TimeOfDay(hour: 9, minute: 0);
 
-    final TimeOfDay? pickedTime = await showTimePicker(
+    final TimeOfDay? pickedTime = await AppTimePicker.show(
       context: context,
       initialTime: initialTime,
-      helpText: isEditing && existingLog != null
+      title: isEditing && existingLog != null
           ? 'Edit Check-In Time'
           : 'Select Check-In Time',
     );
@@ -1150,9 +1228,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             outTime: sessions[0].outTime,
           );
         } else {
-          sessions.add(
-            AttendanceSession(inTime: logTime, outTime: existingLog.outTime),
-          );
+          // If no sessions, we use the timestamp as a fallback for potential existing legacy data
+          sessions.add(AttendanceSession(inTime: logTime));
         }
 
         final updatedLog = AttendanceLog(
@@ -1162,8 +1239,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           timestamp: existingLog.timestamp,
           isSynced: existingLog.isSynced,
           method: 'manual', // Overriding method to reflect user intervention
-          inTime: logTime,
-          outTime: existingLog.outTime,
           sessions: sessions,
         );
         await ref.read(attendanceServiceProvider)?.updateAttendance(updatedLog);
@@ -1172,10 +1247,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final log = AttendanceLog(
           id: '${ref.read(currentUserProvider)!.uid}_${_selectedDay.year}-${_selectedDay.month}-${_selectedDay.day}',
           userId: ref.read(currentUserProvider)!.uid,
-          date: _selectedDay, // The log record date should match selected day
-          timestamp: now, // The physical creation time
+          date: _selectedDay,
+          timestamp: now,
           method: 'manual',
-          inTime: logTime, // The actual Check In Time user selected
           sessions: [AttendanceSession(inTime: logTime)],
         );
         await ref.read(attendanceServiceProvider)?.logAttendance(log);
@@ -1204,16 +1278,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final log = dayLogs.first;
     final inTimeTxt = log.sessions.isNotEmpty
         ? DateFormat('hh:mm a').format(log.sessions.first.inTime)
-        : (log.inTime != null
-              ? DateFormat('hh:mm a').format(log.inTime!)
-              : DateFormat('hh:mm a').format(log.timestamp));
+        : '--:--';
 
     final outTimeTxt =
         log.sessions.isNotEmpty && log.sessions.last.outTime != null
         ? DateFormat('hh:mm a').format(log.sessions.last.outTime!)
-        : (log.outTime != null
-              ? DateFormat('hh:mm a').format(log.outTime!)
-              : '--:--');
+        : '--:--';
 
     String totalTimeTxt = '--';
     if (log.sessions.isNotEmpty) {
@@ -1233,19 +1303,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       } else {
         totalTimeTxt = '${hr}h ${min}m';
       }
-    } else if (log.inTime != null && log.outTime != null) {
-      final duration = log.outTime!.difference(log.inTime!);
-      final hours = duration.inHours;
-      final minutes = duration.inMinutes.remainder(60);
-      totalTimeTxt = '${hours}h ${minutes}m';
-    } else if (log.outTime == null && isSameDay(_selectedDay, DateTime.now())) {
-      final startTime = log.inTime ?? log.timestamp;
-      final duration = DateTime.now().difference(startTime);
-      final hours = duration.inHours;
-      final minutes = duration.inMinutes.remainder(60);
-      totalTimeTxt = '${hours}h ${minutes}m (active)';
-    } else if (log.outTime == null && log.inTime != null) {
-      totalTimeTxt = 'Pending out-time';
     }
 
     return Card(
@@ -1664,9 +1721,7 @@ class _EditDailyDetailsDialogState
     super.initState();
     _sessions = List<AttendanceSession>.from(widget.log.sessions);
     if (_sessions.isEmpty) {
-      _sessions.add(
-        AttendanceSession(inTime: widget.log.inTime ?? widget.log.timestamp),
-      );
+      _sessions.add(AttendanceSession(inTime: widget.log.timestamp));
     }
   }
 
@@ -1678,10 +1733,10 @@ class _EditDailyDetailsDialogState
               ? TimeOfDay.fromDateTime(session.outTime!)
               : TimeOfDay.now());
 
-    final pickedTime = await showTimePicker(
+    final pickedTime = await AppTimePicker.show(
       context: context,
       initialTime: initialTime,
-      helpText: isInTime ? 'Select Login Time' : 'Select Log Out Time',
+      title: isInTime ? 'Select Login Time' : 'Select Log Out Time',
     );
 
     if (pickedTime != null) {
@@ -1756,9 +1811,6 @@ class _EditDailyDetailsDialogState
       // Sort sessions by inTime
       _sessions.sort((a, b) => a.inTime.compareTo(b.inTime));
 
-      DateTime? overallInTime = _sessions.first.inTime;
-      DateTime? overallOutTime = _sessions.last.outTime;
-
       final updatedLog = AttendanceLog(
         id: widget.log.id,
         userId: widget.log.userId,
@@ -1766,8 +1818,6 @@ class _EditDailyDetailsDialogState
         timestamp: widget.log.timestamp,
         isSynced: widget.log.isSynced,
         method: 'manual', // Overriding method to reflect user intervention
-        inTime: overallInTime,
-        outTime: overallOutTime,
         sessions: _sessions,
       );
       await ref.read(attendanceServiceProvider)?.updateAttendance(updatedLog);

@@ -2,15 +2,20 @@
 import '../../core/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../providers/providers.dart';
 import '../admin/admin_screen.dart';
 import '../../services/admin_service.dart';
 import 'widgets/delete_account_dialog.dart';
 import 'widgets/feedback_dialog.dart';
+import 'widgets/permissions_dialog.dart';
 import '../../services/background_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'personal_holidays_screen.dart';
+import '../shared/widgets/app_time_picker.dart';
+import '../../services/auto_checkin_service.dart';
+import 'package:url_launcher/url_launcher.dart' as launcher;
+import 'edit_office_screen.dart';
 
 final isDeletingAccountProvider =
     NotifierProvider<IsDeletingAccountNotifier, bool>(
@@ -51,43 +56,174 @@ class SettingsScreen extends ConsumerWidget {
             Center(
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Theme.of(context).primaryColor,
-                    backgroundImage: user?.photoURL != null
-                        ? NetworkImage(user!.photoURL!)
-                        : null,
-                    child: user?.photoURL == null
-                        ? const Text(
-                            'U',
-                            style: TextStyle(
-                              fontSize: 40,
-                              color: Colors
-                                  .white, // White on primary bg is intentional
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : null,
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                        width: 2,
+                      ),
+                    ),
+                    child: CircleAvatar(
+                      radius: 50,
+                      backgroundColor: Theme.of(context).primaryColor,
+                      backgroundImage: user?.photoURL != null
+                          ? NetworkImage(user!.photoURL!)
+                          : null,
+                      child: user?.photoURL == null
+                          ? Text(
+                              user?.displayName
+                                      ?.substring(0, 1)
+                                      .toUpperCase() ??
+                                  'U',
+                              style: const TextStyle(
+                                fontSize: 40,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : null,
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   Text(
-                    user?.displayName ?? 'John Doe',
+                    user?.displayName ?? 'User Name',
                     style: TextStyle(
-                      fontSize: 22,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).colorScheme.onSurface,
+                      letterSpacing: -0.5,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    user?.email ?? '',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.grey[500],
-                      fontSize: 12,
-                      height: 1.5,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.email_outlined,
+                        size: 14,
+                        color: Colors.grey[500],
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        user?.email ?? '',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 24),
+
+                  // Office Information Section
+                  ref
+                      .watch(userProfileProvider)
+                      .when(
+                        data: (profile) {
+                          final officeName = profile?.officeLocation;
+                          final officeAddress = profile?.officeAddress;
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 16,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).cardTheme.color!.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(
+                                color: Theme.of(
+                                  context,
+                                ).dividerColor.withValues(alpha: 0.1),
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildInfoRow(
+                                  context,
+                                  icon: Icons.business_rounded,
+                                  label: 'Office Name',
+                                  value: officeName ?? 'Not Set',
+                                  iconColor: Colors.blueAccent,
+                                  trailing: IconButton(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => EditOfficeScreen(
+                                            initialName: officeName,
+                                            initialAddress: officeAddress,
+                                            initialLat: profile?.officeLat,
+                                            initialLng: profile?.officeLng,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    icon: const Icon(
+                                      Icons.edit_outlined,
+                                      size: 20,
+                                      color: Colors.blueAccent,
+                                    ),
+                                    tooltip: 'Edit Office',
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    left: 44,
+                                    top: 12,
+                                    bottom: 12,
+                                  ),
+                                  child: Divider(
+                                    height: 1,
+                                    color: Theme.of(
+                                      context,
+                                    ).dividerColor.withValues(alpha: 0.1),
+                                  ),
+                                ),
+                                _buildInfoRow(
+                                  context,
+                                  icon: Icons.location_on_rounded,
+                                  label: 'Office Location',
+                                  value: officeAddress ?? 'Not Set',
+                                  iconColor: Colors.redAccent,
+                                  trailing:
+                                      (profile?.officeLat != null &&
+                                          profile?.officeLng != null)
+                                      ? IconButton(
+                                          onPressed: () async {
+                                            final url = Uri.parse(
+                                              'https://www.google.com/maps/search/?api=1&query=${profile!.officeLat},${profile.officeLng}',
+                                            );
+                                            if (await launcher.canLaunchUrl(
+                                              url,
+                                            )) {
+                                              await launcher.launchUrl(
+                                                url,
+                                                mode: launcher
+                                                    .LaunchMode
+                                                    .externalApplication,
+                                              );
+                                            }
+                                          },
+                                          icon: const Icon(
+                                            Icons.directions_rounded,
+                                            color: Colors.blueAccent,
+                                          ),
+                                          tooltip: 'Open in Maps',
+                                        )
+                                      : null,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        loading: () => const Padding(
+                          padding: EdgeInsets.all(24.0),
+                          child: CircularProgressIndicator(),
+                        ),
+                        error: (_, __) => const SizedBox(),
+                      ),
                 ],
               ),
             ),
@@ -137,9 +273,10 @@ class SettingsScreen extends ConsumerWidget {
                     activeThumbColor: AppTheme.dangerColor,
                   ),
                   onTap: () async {
-                    final TimeOfDay? time = await showTimePicker(
+                    final TimeOfDay? time = await AppTimePicker.show(
                       context: context,
                       initialTime: ref.read(notificationTimeProvider),
+                      title: 'Notification Time',
                     );
                     if (time != null) {
                       await ref
@@ -148,11 +285,25 @@ class SettingsScreen extends ConsumerWidget {
                     }
                   },
                 ),
+                _buildDivider(context),
+                _buildSettingsTile(
+                  context,
+                  icon: Icons.event_available,
+                  iconColor: Colors.tealAccent.shade700,
+                  title: 'Personal Holidays',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PersonalHolidaysScreen(),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
             const SizedBox(height: 24),
 
-            // AUTO CHECK-IN
             _buildSectionHeader('AUTO CHECK-IN'),
             _buildSettingsGroup(
               context,
@@ -162,68 +313,80 @@ class SettingsScreen extends ConsumerWidget {
                   icon: Icons.location_on,
                   iconColor: AppTheme.warningColor,
                   title: 'Auto Check-in',
-                  value: ref
-                      .watch(locationPermissionProvider)
-                      .when(
-                        data: (status) {
-                          if (status == LocationPermission.always) {
-                            return 'Enabled';
+                  value: ref.watch(autoCheckInEnabledProvider) ? null : 'Off',
+                  trailing: Switch.adaptive(
+                    value: ref.watch(autoCheckInEnabledProvider),
+                    onChanged: (val) async {
+                      if (val) {
+                        await _checkLocationPermission(context);
+                        final permission = await Geolocator.checkPermission();
+                        if (permission == LocationPermission.always) {
+                          await ref
+                              .read(autoCheckInEnabledProvider.notifier)
+                              .toggle(true);
+                          if (context.mounted) {
+                            await ref
+                                .read(autoCheckInServiceProvider)
+                                .initGeofence();
                           }
-                          if (status == LocationPermission.whileInUse) {
-                            return 'Needs "Always"';
-                          }
-                          return 'Disabled';
-                        },
-                        loading: () => 'Checking...',
-                        error: (_, __) => 'Error',
-                      ),
-                  onTap: () async {
-                    await _checkLocationPermission(context);
-                    ref.invalidate(locationPermissionProvider);
-                  },
+                        }
+                      } else {
+                        await ref
+                            .read(autoCheckInEnabledProvider.notifier)
+                            .toggle(false);
+                        await ref
+                            .read(autoCheckInServiceProvider)
+                            .stopGeofence();
+                      }
+                    },
+                    activeThumbColor: AppTheme.warningColor,
+                  ),
                 ),
                 _buildDivider(context),
                 _buildSettingsTile(
                   context,
-                  icon: Icons.battery_alert,
-                  iconColor: Colors.orangeAccent,
-                  title: 'Battery Optimization',
-                  value: ref
-                      .watch(batteryOptimizationProvider)
-                      .when(
-                        data: (isIgnored) => isIgnored ? 'Ignored' : 'Active',
-                        loading: () => 'Checking...',
-                        error: (_, __) => 'Error',
-                      ),
-                  onTap: () async {
-                    final status = await Permission.ignoreBatteryOptimizations
-                        .request();
-                    if (context.mounted) {
-                      if (status.isGranted) {
-                        AppTheme.showSuccessSnackBar(
-                          context,
-                          'Battery optimization ignored. Background tasks will run reliably.',
-                        );
-                      } else if (status.isDenied) {
-                        AppTheme.showWarningSnackBar(
-                          context,
-                          'Battery optimization is still active. Background tasks may be delayed.',
-                        );
-                      } else if (status.isPermanentlyDenied) {
-                        AppTheme.showErrorSnackBar(
-                          context,
-                          'Permission permanently denied. Please enable "Allow background activity" in app settings.',
-                        );
-                      } else {
-                        AppTheme.showWarningSnackBar(
-                          context,
-                          'Status: ${status.name}',
-                        );
-                      }
-                      ref.invalidate(batteryOptimizationProvider);
-                    }
-                  },
+                  icon: Icons.radar,
+                  iconColor: AppTheme.warningColor,
+                  title: 'Geofence Radius',
+                  value: '${ref.watch(geofenceRadiusProvider)}m',
+                  onTap: ref.watch(autoCheckInEnabledProvider)
+                      ? () => _showRadiusDialog(context, ref)
+                      : null,
                 ),
+                if (ref.watch(autoCheckInEnabledProvider)) ...[
+                  _buildDivider(context),
+                  _buildSettingsTile(
+                    context,
+                    icon: Icons.security,
+                    iconColor: Colors.blueGrey,
+                    title: 'Permissions',
+                    value: ref
+                        .watch(locationPermissionProvider)
+                        .when(
+                          data: (status) {
+                            if (status == LocationPermission.always) {
+                              return 'Ready';
+                            }
+                            if (status == LocationPermission.whileInUse) {
+                              return 'Needs "Always"';
+                            }
+                            return 'Denied';
+                          },
+                          loading: () => '...',
+                          error: (_, __) => 'Error',
+                        ),
+                    onTap: () async {
+                      await showDialog(
+                        context: context,
+                        builder: (context) => const PermissionsDialog(),
+                      );
+                      ref.invalidate(locationPermissionProvider);
+                      ref.invalidate(backgroundLocationPermissionProvider);
+                      ref.invalidate(notificationPermissionProvider);
+                      ref.invalidate(batteryOptimizationProvider);
+                    },
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 24),
@@ -494,6 +657,58 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+  Widget _buildInfoRow(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color iconColor,
+    Widget? trailing,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (trailing != null) ...[const SizedBox(width: 8), trailing],
+      ],
+    );
+  }
+
   void _showFeedbackDialog(BuildContext context) {
     showDialog(context: context, builder: (context) => const FeedbackDialog());
   }
@@ -533,5 +748,183 @@ class SettingsScreen extends ConsumerWidget {
         }
       }
     }
+  }
+
+  Future<void> _showRadiusDialog(BuildContext context, WidgetRef ref) async {
+    final currentRadius = ref.read(geofenceRadiusProvider);
+    final controller = TextEditingController(text: currentRadius.toString());
+
+    await showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardTheme.color,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Theme.of(context).dividerColor),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Header Icon
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.warningColor.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.radar_rounded,
+                  color: AppTheme.warningColor,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Title
+              Text(
+                'Geofence Radius',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Description
+              const Text(
+                'Enter the radius in meters for the office geofence. This determines how close you need to be for auto check-in.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Color(0xFF9E9E9E),
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+                decoration: InputDecoration(
+                  hintText: '100',
+                  suffixText: 'm',
+                  suffixStyle: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.normal,
+                    color: Colors.grey,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(
+                      color: Theme.of(
+                        context,
+                      ).dividerColor.withValues(alpha: 0.2),
+                    ),
+                  ),
+                ),
+                autofocus: true,
+              ),
+
+              const SizedBox(height: 32),
+
+              // Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 56,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          backgroundColor: Theme.of(
+                            context,
+                          ).dividerColor.withValues(alpha: 0.05),
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onSurface,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          final newRadius = int.tryParse(controller.text);
+                          if (newRadius != null && newRadius >= 10) {
+                            await ref
+                                .read(geofenceRadiusProvider.notifier)
+                                .update(newRadius);
+                            if (!context.mounted) return;
+
+                            // Re-initialize geofence with new radius
+                            await ref
+                                .read(autoCheckInServiceProvider)
+                                .initGeofence();
+
+                            if (!context.mounted) return;
+                            Navigator.pop(context);
+                            AppTheme.showSuccessSnackBar(
+                              context,
+                              'Radius updated to ${newRadius}m',
+                            );
+                          } else {
+                            AppTheme.showErrorSnackBar(
+                              context,
+                              'Please enter a valid radius (min 10m)',
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Save',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

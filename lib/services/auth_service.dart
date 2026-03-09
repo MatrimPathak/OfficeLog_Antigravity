@@ -7,6 +7,7 @@ import 'package:hive/hive.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../data/models/user_profile.dart';
+import '../data/models/holiday.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -219,6 +220,27 @@ class AuthService {
   ) async {
     await _firestore.collection('users').doc(uid).update({
       'settings': settings,
+    });
+  }
+
+  Future<void> updateUserSelectedHolidays(
+    String uid,
+    List<String> holidayIds,
+  ) async {
+    await _firestore.collection('users').doc(uid).update({
+      'selectedHolidays': holidayIds,
+    });
+  }
+
+  Future<void> addCustomHoliday(String uid, Holiday holiday) async {
+    await _firestore.collection('users').doc(uid).update({
+      'customHolidays': FieldValue.arrayUnion([holiday.toMap()]),
+    });
+  }
+
+  Future<void> deleteCustomHoliday(String uid, Holiday holiday) async {
+    await _firestore.collection('users').doc(uid).update({
+      'customHolidays': FieldValue.arrayRemove([holiday.toMap()]),
     });
   }
 }

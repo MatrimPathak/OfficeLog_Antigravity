@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:native_geofence/native_geofence.dart';
@@ -20,11 +21,12 @@ class AutoCheckInService {
 
   Future<void> _logBackgroundEvent(String message) async {
     // Avoid LoggerService in background isolate if it causes hangs
-    print('BACKGROUND_EVENT: $message');
+    // Using debugPrint to satisfy avoid_print lint while maintaining console output for debugging geofence
+    debugPrint('BACKGROUND_EVENT: $message');
   }
 
   Future<void> initGeofence() async {
-    if (_isInitialized) return;
+    // We allow re-initialization to update radius
     final user = ref.read(currentUserProvider);
     if (user == null) return;
 
@@ -48,7 +50,7 @@ class AutoCheckInService {
         latitude: profile.officeLat!,
         longitude: profile.officeLng!,
       ),
-      radiusMeters: 500, // Increased for easier emulator targeting
+      radiusMeters: ref.read(geofenceRadiusProvider).toDouble(),
       triggers: {GeofenceEvent.enter, GeofenceEvent.exit, GeofenceEvent.dwell},
       androidSettings: AndroidGeofenceSettings(
         initialTriggers: {GeofenceEvent.enter, GeofenceEvent.dwell},
@@ -103,19 +105,21 @@ class AutoCheckInService {
       await _logBackgroundEvent(
         'AutoCheckIn: checkAndLogAttendance triggered.',
       );
-      print('DEBUG: AutoCheckIn - Checking user state...');
+      await _logBackgroundEvent('AutoCheckIn: Checking user state...');
       var user = ref.read(currentUserProvider);
 
       // Fallback for background isolate if provider hasn't filled yet
       if (user == null) {
-        print(
-          'DEBUG: AutoCheckIn - currentUserProvider null, trying direct FirebaseAuth...',
+        await _logBackgroundEvent(
+          'AutoCheckIn: currentUserProvider null, trying direct FirebaseAuth...',
         );
         user = FirebaseAuth.instance.currentUser;
       }
 
       if (user == null) {
-        print('DEBUG: AutoCheckIn - FAILED: No user found (Isolate).');
+        await _logBackgroundEvent(
+          'AutoCheckIn: FAILED: No user found (Isolate).',
+        );
         await _logBackgroundEvent('AutoCheckIn: No user logged in.');
         return;
       } else {
@@ -137,38 +141,7 @@ class AutoCheckInService {
 
       final today = DateTime.now();
 
-      // 1. Workday-Only Check (Bypassed if allowMockLocation is true)
-      if (!allowMockLocation) {
-        if (today.weekday == DateTime.saturday ||
-            today.weekday == DateTime.sunday) {
-          await _logBackgroundEvent(
-            'AutoCheckIn: Skipping - Weekend logging disabled.',
-          );
-          return;
-        }
-
-        // 2. Time-of-Day Window (6:00 AM to 6:00 PM)
-        if (today.hour < 6 || today.hour >= 18) {
-          LoggerService.instance.background(
-            'AutoCheckIn: Outside time window (6am-6pm), skipping.',
-          );
-          return;
-        }
-      } else {
-        await _logBackgroundEvent(
-          'AutoCheckIn: Mock location allowed, bypassing date/time filters.',
-        );
-      }
-
-      // Use manual service instantiation instead of provider to avoid nulls in background isolate
-      final attendanceService = AttendanceService(user.uid);
-
-      final logs = await attendanceService.getAttendanceForDate(today);
-      final isLogged = logs.any(
-        (log) => StatsCalculator.isSameDay(log.date, today),
-      );
-
-      // 4. Ensure Geofence Engine is Active
+      // Ensure Geofence Engine is Active
       if (!_isInitialized) {
         await initGeofence();
       }
@@ -223,7 +196,7 @@ class AutoCheckInService {
         return;
       }
 
-      // 5. Mock Location Check
+      // Mock Location Check
       if (position.isMocked && !allowMockLocation) {
         LoggerService.instance.background(
           'AutoCheckIn: Mock location detected and disallowed.',
@@ -241,23 +214,52 @@ class AutoCheckInService {
         profile.officeLng!,
       );
 
-      LoggerService.instance.background(
-        'AutoCheckIn: Distance to office is $distance meters',
-      );
+      final radius = ref.read(geofenceRadiusProvider).toDouble();
+      final checkInThreshold = radius;
+      final checkOutThreshold = radius;
+
       await _logBackgroundEvent(
         'AutoCheckIn: Distance is ${distance.toInt()}m',
       );
 
-      // Threshold: 200 meters (Bypassed if allowMockLocation is true)
-      if (distance <= 200 || allowMockLocation) {
-        if (!isLogged) {
+      // Use manual service instantiation instead of provider to avoid nulls in background isolate
+      final attendanceService = AttendanceService(user.uid);
+      final logs = await attendanceService.getAttendanceForDate(today);
+      final isLoggedToday = logs.any(
+        (log) => StatsCalculator.isSameDay(log.date, today),
+      );
+
+      // --- LOGIC SPLIT: CHECK-IN vs CHECK-OUT ---
+
+      if (distance <= checkInThreshold ||
+          (allowMockLocation && distance <= checkInThreshold)) {
+        // --- ATTEMPT CHECK-IN ---
+        if (!isLoggedToday) {
+          // 1. Workday-Only Check (Bypassed if allowMockLocation is true)
+          if (!allowMockLocation) {
+            if (today.weekday == DateTime.saturday ||
+                today.weekday == DateTime.sunday) {
+              await _logBackgroundEvent(
+                'AutoCheckIn: Skipping Check-in - Weekend.',
+              );
+              return;
+            }
+
+            // 2. Time-of-Day Window (6:00 AM to 6:00 PM) for NEW check-ins
+            if (today.hour < 6 || today.hour >= 18) {
+              await _logBackgroundEvent(
+                'AutoCheckIn: Skipping Check-in - Outside 6am-6pm.',
+              );
+              return;
+            }
+          }
+
           final log = AttendanceLog(
             id: '${user.uid}_${today.year}-${today.month}-${today.day}',
             userId: user.uid,
             date: today,
             timestamp: today,
             method: 'auto',
-            inTime: today,
             sessions: [AttendanceSession(inTime: today)],
           );
           await attendanceService.logAttendance(log);
@@ -277,7 +279,6 @@ class AutoCheckInService {
 
           if (todayLogs.isNotEmpty) {
             final todayLog = todayLogs.first;
-            // Check if the last session has an outTime (they were checked out)
             final sessions = List<AttendanceSession>.from(todayLog.sessions);
             if (sessions.isNotEmpty && sessions.last.outTime != null) {
               // Create a brand new active session for this return visit
@@ -290,40 +291,29 @@ class AutoCheckInService {
                 timestamp: todayLog.timestamp,
                 isSynced: todayLog.isSynced,
                 method: todayLog.method,
-                inTime: todayLog.inTime,
-                outTime: null, // CLEAR outTime for legacy UI components
                 sessions: sessions,
               );
 
               await attendanceService.updateAttendance(updatedLog);
-              LoggerService.instance.background(
-                'AutoCheckIn: Returned to office. Cleared previous check-out time.',
-              );
-              await _logBackgroundEvent(
-                'AutoCheckIn: SUCCESS - Re-entered office, checkout cleared.',
-              );
-
               await NotificationService.showNotification(
                 'Welcome Back',
                 'Your check-out time has been paused since you returned.',
               );
-            } else {
-              LoggerService.instance.background(
-                'AutoCheckIn: Already logged today (and nearby).',
+              await _logBackgroundEvent(
+                'AutoCheckIn: SUCCESS - Re-entered office, session resumed.',
               );
             }
           }
         }
-      } else {
-        if (isLogged) {
-          LoggerService.instance.background(
-            'AutoCheckIn: Far from office, attempting check-out.',
-          );
+      } else if (distance > checkOutThreshold) {
+        // --- ATTEMPT CHECK-OUT ---
+        // We ALWAYS allow check-outs if distance > 200m and user is logged in, regardless of time.
+        if (isLoggedToday) {
           await checkAndLogOutAttendance();
         }
       }
     } catch (e, stack) {
-      print('DEBUG: AutoCheckIn CRITICAL error: $e\n$stack');
+      await _logBackgroundEvent('AutoCheckIn: CRITICAL error: $e\n$stack');
     }
   }
 
@@ -332,24 +322,26 @@ class AutoCheckInService {
       await _logBackgroundEvent(
         'AutoCheckIn: checkAndLogOutAttendance triggered.',
       );
-      print('DEBUG: AutoCheckOut - Checking user state...');
+      await _logBackgroundEvent('AutoCheckOut: Checking user state...');
       var user = ref.read(currentUserProvider);
 
       // Fallback for background isolate if provider hasn't filled yet
       if (user == null) {
-        print(
-          'DEBUG: AutoCheckOut - currentUserProvider null, trying direct FirebaseAuth...',
+        await _logBackgroundEvent(
+          'AutoCheckOut: currentUserProvider null, trying direct FirebaseAuth...',
         );
         user = FirebaseAuth.instance.currentUser;
       }
 
       if (user == null) {
-        print('DEBUG: AutoCheckOut - FAILED: No user found (Isolate).');
+        await _logBackgroundEvent(
+          'AutoCheckOut: FAILED: No user found (Isolate).',
+        );
         await _logBackgroundEvent('AutoCheckOut: No user logged in.');
         return;
       }
 
-      print('DEBUG: AutoCheckOut - User found: ${user.uid}');
+      await _logBackgroundEvent('AutoCheckOut: User found: ${user.uid}');
 
       final today = DateTime.now();
 
@@ -394,8 +386,6 @@ class AutoCheckInService {
         timestamp: todayLog.timestamp,
         isSynced: todayLog.isSynced,
         method: todayLog.method,
-        inTime: todayLog.inTime,
-        outTime: today,
         sessions: sessions,
       );
 
@@ -403,7 +393,12 @@ class AutoCheckInService {
 
       // We only want to notify the user of the VERY FIRST checkout
       // so we don't spam notifications every 15m they are away from office.
-      if (todayLog.outTime == null) {
+      // Checking if the original todayLog had any session with an outTime
+      final wasAlreadyCheckedOut = todayLog.sessions.any(
+        (s) => s.outTime != null,
+      );
+
+      if (!wasAlreadyCheckedOut) {
         await refreshSmartNotifications(ref);
         await NotificationService.showNotification(
           'Auto Check-out',
@@ -418,7 +413,19 @@ class AutoCheckInService {
         );
       }
     } catch (e, stack) {
-      print('DEBUG: AutoCheckOut CRITICAL error: $e\n$stack');
+      await _logBackgroundEvent('AutoCheckOut: CRITICAL error: $e\n$stack');
+    }
+  }
+
+  Future<void> stopGeofence() async {
+    try {
+      await NativeGeofenceManager.instance.removeGeofenceById(
+        'office_geofence',
+      );
+      _isInitialized = false;
+      await _logBackgroundEvent('Geofence: Stopped and removed.');
+    } catch (e, stack) {
+      _logBackgroundEvent('Geofence: ERROR during stopping: $e\n$stack');
     }
   }
 }

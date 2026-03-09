@@ -33,6 +33,82 @@ final backgroundLocationPermissionProvider = FutureProvider<bool>((ref) async {
   return await Permission.locationAlways.isGranted;
 });
 
+final notificationPermissionProvider = FutureProvider<bool>((ref) async {
+  return await Permission.notification.isGranted;
+});
+
+final autoCheckInEnabledProvider =
+    NotifierProvider<AutoCheckInEnabledNotifier, bool>(
+      AutoCheckInEnabledNotifier.new,
+    );
+
+class AutoCheckInEnabledNotifier extends Notifier<bool> {
+  Timer? _debounce;
+
+  @override
+  bool build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    return prefs.getBool('auto_checkin_enabled') ?? true;
+  }
+
+  Future<void> toggle(bool value) async {
+    state = value;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool('auto_checkin_enabled', value);
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 2), () async {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        await ref.read(authServiceProvider).updateUserSettings(user.uid, {
+          'auto_checkin_enabled': value,
+          'theme_mode': ref.read(themeModeProvider).index,
+          'notifications_enabled': ref.read(notificationEnabledProvider),
+          'notification_hour': ref.read(notificationTimeProvider).hour,
+          'notification_minute': ref.read(notificationTimeProvider).minute,
+          'geofence_radius': ref.read(geofenceRadiusProvider),
+        });
+      }
+    });
+  }
+}
+
+final geofenceRadiusProvider = NotifierProvider<GeofenceRadiusNotifier, int>(
+  GeofenceRadiusNotifier.new,
+);
+
+class GeofenceRadiusNotifier extends Notifier<int> {
+  Timer? _debounce;
+
+  @override
+  int build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    return prefs.getInt('geofence_radius') ?? 100;
+  }
+
+  Future<void> update(int value) async {
+    if (value < 10) value = 10; // Minimum sanity check
+    state = value;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setInt('geofence_radius', value);
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 2), () async {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        await ref.read(authServiceProvider).updateUserSettings(user.uid, {
+          'geofence_radius': value,
+          'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
+          'theme_mode': ref.read(themeModeProvider).index,
+          'notifications_enabled': ref.read(notificationEnabledProvider),
+          'notification_hour': ref.read(notificationTimeProvider).hour,
+          'notification_minute': ref.read(notificationTimeProvider).minute,
+        });
+      }
+    });
+  }
+}
+
 // Auth Providers
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError();
@@ -147,6 +223,8 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
           ), // Sync all
           'notification_hour': ref.read(notificationTimeProvider).hour,
           'notification_minute': ref.read(notificationTimeProvider).minute,
+          'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
+          'geofence_radius': ref.read(geofenceRadiusProvider),
         });
       }
     });
@@ -189,6 +267,8 @@ class NotificationEnabledNotifier extends Notifier<bool> {
           'theme_mode': themeIndex,
           'notification_hour': time.hour,
           'notification_minute': time.minute,
+          'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
+          'geofence_radius': ref.read(geofenceRadiusProvider),
         });
       }
     });
@@ -233,6 +313,8 @@ class NotificationTimeNotifier extends Notifier<TimeOfDay> {
           'notification_minute': time.minute,
           'notifications_enabled': enabled,
           'theme_mode': themeIndex,
+          'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
+          'geofence_radius': ref.read(geofenceRadiusProvider),
         });
       }
     });

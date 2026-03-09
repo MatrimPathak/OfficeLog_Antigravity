@@ -1,11 +1,14 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/admin_service.dart';
 import '../../data/models/holiday.dart';
 import '../../data/models/office_location.dart';
+import '../../logic/ics_parser.dart';
 import '../providers/providers.dart';
 import 'widgets/add_holiday_dialog.dart';
 import 'widgets/add_office_location_dialog.dart';
@@ -75,94 +78,194 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
   }
 }
 
-class HolidaysTab extends ConsumerWidget {
+class HolidaysTab extends ConsumerStatefulWidget {
   const HolidaysTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HolidaysTab> createState() => _HolidaysTabState();
+}
+
+class _HolidaysTabState extends ConsumerState<HolidaysTab> {
+  int? _selectedYear;
+
+  @override
+  Widget build(BuildContext context) {
     final holidaysAsync = ref.watch(sortedHolidaysProvider);
 
     return holidaysAsync.when(
       data: (holidays) {
+        // Extract unique years up to the current year
+        final currentYear = DateTime.now().year;
+        final Set<int> availableYears = {};
+        for (final holiday in holidays) {
+          if (holiday.date.year <= currentYear) {
+            availableYears.add(holiday.date.year);
+          }
+        }
+
+        final List<int> sortedYears = availableYears.toList()
+          ..sort((a, b) => b.compareTo(a));
+
+        // Filter the listed holidays
+        final filteredHolidays = holidays.where((holiday) {
+          if (_selectedYear == null) return true; // 'All Years' selected
+          // Show if the year matches or if it's recurring (happens every year)
+          return holiday.date.year == _selectedYear || holiday.isRecurring;
+        }).toList();
+
         return Stack(
           children: [
-            ListView.builder(
-              itemCount: holidays.length,
-              itemBuilder: (context, index) {
-                final holiday = holidays[index];
-                final date = holiday.date;
-
-                final List<String> officeLocs = holiday.officeLocations;
-                final String officeLocString = officeLocs.isNotEmpty
-                    ? officeLocs.join(', ')
-                    : 'All Offices';
-
-                final bool isRecurring = holiday.isRecurring;
-
-                return Container(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
+            Column(
+              children: [
+                // Filter Dropdown
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 8.0,
                   ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardTheme.color, // Lighter card bg
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                  ),
-                  child: ListTile(
-                    onTap: () => _showAddHolidayDialog(context, ref, holiday),
-                    isThreeLine: true,
-                    title: Text(
-                      holiday.name,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
+                  child: Row(
+                    children: [
+                      Text(
+                        'Filter by Year:',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          DateFormat.yMMMd().format(date),
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.6),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: DropdownButtonFormField<int?>(
+                          value: _selectedYear,
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            filled: true,
+                            fillColor: Theme.of(context).cardTheme.color,
+                          ),
+                          items: [
+                            const DropdownMenuItem<int?>(
+                              value: null,
+                              child: Text('All Years'),
+                            ),
+                            ...sortedYears.map((year) {
+                              return DropdownMenuItem<int?>(
+                                value: year,
+                                child: Text(year.toString()),
+                              );
+                            }),
+                          ],
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedYear = value;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: filteredHolidays.length,
+                    itemBuilder: (context, index) {
+                      final holiday = filteredHolidays[index];
+                      final date = holiday.date;
+
+                      final List<String> officeLocs = holiday.officeLocations;
+                      final String officeLocString = officeLocs.isNotEmpty
+                          ? officeLocs.join(', ')
+                          : 'All Offices';
+
+                      final bool isRecurring = holiday.isRecurring;
+
+                      return Container(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).cardTheme.color, // Lighter card bg
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Theme.of(context).dividerColor,
                           ),
                         ),
-                        Text(
-                          isRecurring
-                              ? '$officeLocString • Recurring'
-                              : officeLocString,
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.8),
-                            fontWeight: FontWeight.w500,
+                        child: ListTile(
+                          onTap: () =>
+                              _showAddHolidayDialog(context, ref, holiday),
+                          isThreeLine: true,
+                          title: Text(
+                            holiday.name,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                DateFormat.yMMMd().format(date),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.6),
+                                ),
+                              ),
+                              Text(
+                                isRecurring
+                                    ? '$officeLocString • Recurring'
+                                    : officeLocString,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.8),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(
+                              Icons.delete,
+                              color: AppTheme.dangerColor,
+                            ),
+                            onPressed: () {
+                              ref
+                                  .read(adminServiceProvider)
+                                  .deleteHoliday(holiday.id);
+                            },
                           ),
                         ),
-                      ],
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(
-                        Icons.delete,
-                        color: AppTheme.dangerColor,
-                      ),
-                      onPressed: () {
-                        ref
-                            .read(adminServiceProvider)
-                            .deleteHoliday(holiday.id);
-                      },
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ],
             ),
             Positioned(
               bottom: 16,
               right: 16,
-              child: FloatingActionButton(
-                onPressed: () => _showAddHolidayDialog(context, ref, null),
-                child: const Icon(Icons.add),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FloatingActionButton(
+                    heroTag: 'importIcsBtn',
+                    onPressed: () => _importIcs(context, ref),
+                    backgroundColor: Theme.of(context).cardTheme.color,
+                    child: Icon(Icons.download, color: AppTheme.primaryColor),
+                  ),
+                  const SizedBox(height: 16),
+                  FloatingActionButton(
+                    heroTag: 'addHolidayBtn',
+                    onPressed: () => _showAddHolidayDialog(context, ref, null),
+                    child: const Icon(Icons.add),
+                  ),
+                ],
               ),
             ),
           ],
@@ -171,6 +274,62 @@ class HolidaysTab extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator.adaptive()),
       error: (e, s) => Center(child: Text('Error: $e')),
     );
+  }
+
+  Future<void> _importIcs(BuildContext context, WidgetRef ref) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['ics'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final icsString = await file.readAsString();
+
+        // Show loading indicator
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return const Center(child: CircularProgressIndicator.adaptive());
+            },
+          );
+        }
+
+        final holidays = IcsParser.parseIcs(icsString);
+        await ref.read(adminServiceProvider).batchAddHolidays(holidays);
+
+        // Hide loading indicator
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Successfully imported ${holidays.length} holidays',
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e, stacktrace) {
+      print('DEBUG ICS Import Error: $e');
+      print('DEBUG ICS Import Stacktrace: $stacktrace');
+      if (context.mounted) {
+        // Hide loading indicator if showing
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error importing ICS: $e'),
+            backgroundColor: AppTheme.dangerColor,
+          ),
+        );
+      }
+    }
   }
 
   void _showAddHolidayDialog(
