@@ -430,7 +430,7 @@ class SettingsScreen extends ConsumerWidget {
                   iconColor: Colors.orangeAccent,
                   title: 'Terms and Conditions',
                   onTap: () async {
-                    final url = Uri.parse('https://officelog.app/terms');
+                    final url = Uri.parse('https://officelog.matrimpathak.com/terms');
                     if (await launcher.canLaunchUrl(url)) {
                       await launcher.launchUrl(
                         url,
@@ -446,7 +446,7 @@ class SettingsScreen extends ConsumerWidget {
                   iconColor: Colors.greenAccent,
                   title: 'Privacy Policy',
                   onTap: () async {
-                    final url = Uri.parse('https://officelog.app/privacy');
+                    final url = Uri.parse('https://officelog.matrimpathak.com/privacy');
                     if (await launcher.canLaunchUrl(url)) {
                       await launcher.launchUrl(
                         url,

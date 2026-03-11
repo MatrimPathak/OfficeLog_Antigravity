@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:office_log/core/theme/app_theme.dart';
 import '../providers/providers.dart';
+import 'package:url_launcher/url_launcher.dart' as launcher;
 
 class LoginScreen extends ConsumerWidget {
   const LoginScreen({super.key});
@@ -176,13 +177,57 @@ class LoginScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 // Term
-                Text(
-                  'By continuing, you agree to our Terms & Privacy Policy.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                  ),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'By continuing, you agree to our ',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                    ),
+                    InkWell(
+                      onTap: () async {
+                        final url = Uri.parse('https://officelog.matrimpathak.com/terms');
+                        if (await launcher.canLaunchUrl(url)) {
+                          await launcher.launchUrl(url, mode: launcher.LaunchMode.externalApplication);
+                        }
+                      },
+                      child: Text(
+                        'Terms',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).primaryColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ),
+                    Text(
+                      ' & ',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                    ),
+                    InkWell(
+                      onTap: () async {
+                        final url = Uri.parse('https://officelog.matrimpathak.com/privacy');
+                        if (await launcher.canLaunchUrl(url)) {
+                          await launcher.launchUrl(url, mode: launcher.LaunchMode.externalApplication);
+                        }
+                      },
+                      child: Text(
+                        'Privacy Policy.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).primaryColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 32),
               ],
