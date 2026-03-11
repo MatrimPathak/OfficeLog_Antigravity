@@ -8,6 +8,7 @@ plugins {
 
 import java.util.Properties
 import java.io.FileInputStream
+import java.util.Base64
 
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
@@ -20,7 +21,21 @@ val localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.exists()) {
     localProperties.load(FileInputStream(localPropertiesFile))
 }
-val mapsApiKey = localProperties.getProperty("MAPS_API_KEY") ?: "YOUR_ANDROID_MAPS_API_KEY_HERE"
+
+val dartDefines = if (project.hasProperty("dart-defines")) {
+    (project.property("dart-defines") as String).split(",").associate {
+        val decoded = String(Base64.getDecoder().decode(it))
+        val split = decoded.split("=", limit = 2)
+        if (split.size == 2) split[0] to split[1] else split[0] to ""
+    }
+} else {
+    emptyMap<String, String>()
+}
+
+val mapsApiKey = dartDefines["MAPS_API_KEY"] 
+    ?: System.getenv("MAPS_API_KEY") 
+    ?: localProperties.getProperty("MAPS_API_KEY") 
+    ?: "YOUR_ANDROID_MAPS_API_KEY_HERE"
 
 kotlin {
     compilerOptions {

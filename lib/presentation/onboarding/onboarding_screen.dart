@@ -1,13 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:async';
 import '../providers/providers.dart';
 import '../../core/theme/app_theme.dart';
-import '../../services/notification_service.dart';
-import '../../services/auto_checkin_service.dart';
 import '../../data/models/office_location.dart';
 import '../../services/google_places_service.dart';
 import '../../data/models/place_suggestion.dart';
@@ -179,28 +175,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     setState(() => _isLoading = true);
     try {
-      // Request Location Permission
-      LocationPermission locationPermission =
-          await Geolocator.checkPermission();
-      if (locationPermission == LocationPermission.denied) {
-        locationPermission = await Geolocator.requestPermission();
-      }
-
-      if (locationPermission == LocationPermission.denied ||
-          locationPermission == LocationPermission.deniedForever) {
-        // Handle denied permission (optional: show dialog)
-      } else {
-        if (locationPermission == LocationPermission.whileInUse) {
-          final alwaysStatus = await Permission.locationAlways.request();
-          if (alwaysStatus.isGranted) {
-            debugPrint('Location Always granted');
-          }
-        }
-        await Permission.ignoreBatteryOptimizations.request();
-        await Permission.notification.request();
-        await NotificationService.requestPermissions();
-      }
-
       final user = ref.read(currentUserProvider);
       if (user != null) {
         await ref
@@ -212,8 +186,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               _selectedLocation!.longitude,
               address: _selectedLocation!.address,
             );
-
-        await ref.read(autoCheckInServiceProvider).initGeofence();
       }
     } catch (e) {
       if (mounted) {
@@ -247,7 +219,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             onMapCreated: (controller) => _mapController.complete(controller),
             markers: _markers,
             onTap: (position) => _updateMarker(position),
-            myLocationEnabled: true,
+            myLocationEnabled: false,
             myLocationButtonEnabled: false,
             mapToolbarEnabled: false,
             padding: const EdgeInsets.only(bottom: 250, top: 100),

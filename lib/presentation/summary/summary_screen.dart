@@ -1,4 +1,4 @@
-﻿import 'package:fl_chart/fl_chart.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
@@ -16,9 +16,7 @@ class SummaryScreen extends ConsumerWidget {
     final activeYearsAsync = ref.watch(activeYearsProvider);
     final yearlyLogsAsync = ref.watch(yearlyAttendanceProvider(currentYear));
     final holidaysAsync = ref.watch(holidaysStreamProvider);
-    final globalConfig = ref.watch(globalConfigProvider).value ?? {};
-    final calculateAsWorking =
-        globalConfig['calculateHolidayAsWorking'] ?? false;
+    final calculateAsWorking = ref.watch(calculateHolidayAsWorkingProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(

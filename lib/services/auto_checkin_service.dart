@@ -135,8 +135,7 @@ class AutoCheckInService {
 
       final config = ref.read(globalConfigProvider).value ?? {};
       if (config.containsKey('allowMockLocation')) {
-        allowMockLocation =
-            allowMockLocation || (config['allowMockLocation'] == true);
+        allowMockLocation = config['allowMockLocation'] == true;
       }
 
       final today = DateTime.now();
@@ -152,7 +151,7 @@ class AutoCheckInService {
           .getUserProfile(user.uid)
           .first
           .timeout(
-            const Duration(seconds: 15),
+            const Duration(seconds: 3),
             onTimeout: () {
               return null;
             },
@@ -178,7 +177,7 @@ class AutoCheckInService {
         position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.medium,
-            timeLimit: Duration(seconds: 15),
+            timeLimit: Duration(seconds: 3),
           ),
         );
       } catch (e) {
@@ -365,11 +364,13 @@ class AutoCheckInService {
       final sessions = List<AttendanceSession>.from(todayLog.sessions);
 
       // Update the active session's outTime
+      bool newlyCheckedOut = false;
       if (sessions.isNotEmpty && sessions.last.outTime == null) {
         sessions[sessions.length - 1] = AttendanceSession(
           inTime: sessions.last.inTime,
           outTime: today,
         );
+        newlyCheckedOut = true;
       } else if (sessions.isNotEmpty) {
         // If they trigger an exit but their last session was already checked out (e.g. dwell triggers),
         // we just update the outTime of the last session to extend it.
@@ -391,21 +392,14 @@ class AutoCheckInService {
 
       await attendanceService.updateAttendance(updatedLog);
 
-      // We only want to notify the user of the VERY FIRST checkout
-      // so we don't spam notifications every 15m they are away from office.
-      // Checking if the original todayLog had any session with an outTime
-      final wasAlreadyCheckedOut = todayLog.sessions.any(
-        (s) => s.outTime != null,
-      );
-
-      if (!wasAlreadyCheckedOut) {
+      if (newlyCheckedOut) {
         await refreshSmartNotifications(ref);
         await NotificationService.showNotification(
           'Auto Check-out',
           'You have been checked out!',
         );
         await _logBackgroundEvent(
-          'AutoCheckOut: SUCCESS - First checkout of the day.',
+          'AutoCheckOut: SUCCESS - New checkout session.',
         );
       } else {
         await _logBackgroundEvent(

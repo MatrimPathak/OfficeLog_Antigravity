@@ -10,7 +10,6 @@ import 'auto_checkin_service.dart';
 import 'notification_service.dart';
 import 'logger_service.dart';
 import 'attendance_service.dart';
-import 'admin_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> geofenceTriggered(GeofenceCallbackParams params) async {
@@ -38,22 +37,8 @@ Future<void> geofenceTriggered(GeofenceCallbackParams params) async {
       overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
     );
 
-    // Wait for config and auth
-    print('NATIVE_GEOFENCE_ISOLATE: Waiting for config and auth...');
-    try {
-      await container
-          .read(globalConfigProvider.future)
-          .timeout(const Duration(seconds: 20));
-      print('NATIVE_GEOFENCE_ISOLATE: Config ready.');
-
-      await container
-          .read(authStateProvider.future)
-          .timeout(const Duration(seconds: 20));
-      print('NATIVE_GEOFENCE_ISOLATE: Auth ready.');
-    } catch (e) {
-      print('NATIVE_GEOFENCE_ISOLATE: Timeout/Error waiting for state: $e');
-      // We continue anyway, as the service might handle nulls safely or use fallbacks
-    }
+    // Skip waiting for Riverpod async providers in background isolate.
+    // AutoCheckInService uses direct FirebaseAuth.instance.currentUser fallback.
 
     final autoCheckInService = container.read(autoCheckInServiceProvider);
 

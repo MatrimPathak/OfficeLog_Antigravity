@@ -6,6 +6,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'presentation/home/home_screen.dart';
 import 'presentation/login/login_screen.dart';
 import 'presentation/onboarding/onboarding_screen.dart';
+import 'presentation/onboarding/select_holidays_onboarding_screen.dart';
+import 'presentation/onboarding/config_onboarding_screen.dart';
 import 'presentation/providers/providers.dart';
 import 'services/notification_service.dart';
 import 'services/background_service.dart';
@@ -65,6 +67,15 @@ class MyApp extends ConsumerWidget {
                       profile.officeLocation!.isEmpty) {
                     return const OnboardingScreen();
                   }
+
+                  if (profile.selectedHolidays == null) {
+                    return const SelectHolidaysOnboardingScreen();
+                  }
+
+                  if (!profile.isOnboardingCompleted) {
+                    return const ConfigOnboardingScreen();
+                  }
+
                   return const HomeScreen();
                 },
                 loading: () => const Scaffold(

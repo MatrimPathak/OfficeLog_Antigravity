@@ -1,8 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/theme/app_theme.dart';
 
-import 'package:geolocator/geolocator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
@@ -80,8 +79,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final currentYear = _focusedDay.year;
     final globalConfig = ref.watch(globalConfigProvider).value ?? {};
     final userSelectedHolidaysAsync = ref.watch(userSelectedHolidaysProvider);
-    final calculateAsWorking =
-        globalConfig['calculateHolidayAsWorking'] ?? false;
+    final calculateAsWorking = ref.watch(calculateHolidayAsWorkingProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -117,7 +115,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildDebugLocationInfo(),
                   const SizedBox(height: 16),
                   // Calendar section (Top)
                   Card(
@@ -1575,130 +1572,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildDebugLocationInfo() {
-    final prefs = ref.watch(sharedPreferencesProvider);
-    final allowMockLocation =
-        prefs.getBool('allowMockLocation') ??
-        ref.watch(globalConfigProvider).value?['allowMockLocation'] == true;
-
-    if (!allowMockLocation) return const SizedBox.shrink();
-
-    final userProfile = ref.watch(userProfileProvider).value;
-    if (userProfile == null) return const SizedBox.shrink();
-
-    final officeLat = userProfile.officeLat;
-    final officeLng = userProfile.officeLng;
-
-    return StreamBuilder<Position>(
-      stream: Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
-          distanceFilter: 0,
-        ),
-      ),
-      builder: (context, snapshot) {
-        String distanceText = 'Calculating distance...';
-        bool isMockedText = false;
-        if (snapshot.hasData && officeLat != null && officeLng != null) {
-          final pos = snapshot.data!;
-          final distance = Geolocator.distanceBetween(
-            pos.latitude,
-            pos.longitude,
-            officeLat,
-            officeLng,
-          );
-          distanceText = '${distance.toInt()}m away';
-          isMockedText = pos.isMocked;
-        }
-
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-          margin: const EdgeInsets.only(top: 8),
-          decoration: BoxDecoration(
-            color: Colors.redAccent.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    '📍 OFFICE TARGET',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.redAccent,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      if (ref
-                              .watch(globalConfigProvider)
-                              .value?['allowMockLocation'] ==
-                          true)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          margin: const EdgeInsets.only(right: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'DEBUG MODE',
-                            style: TextStyle(fontSize: 8, color: Colors.green),
-                          ),
-                        ),
-                      if (isMockedText)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'MOCKED',
-                            style: TextStyle(fontSize: 8, color: Colors.orange),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '$officeLat, $officeLng',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.redAccent,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Divider(height: 12, color: Colors.redAccent),
-              Text(
-                'DISTANCE: $distanceText',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.redAccent,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

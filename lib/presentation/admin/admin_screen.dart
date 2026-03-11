@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -439,37 +439,9 @@ class GlobalSettingsTab extends ConsumerWidget {
 
     return configAsync.when(
       data: (config) {
-        final calculateAsWorking = config['calculateHolidayAsWorking'] ?? false;
-
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Card(
-              child: SwitchListTile(
-                title: Text(
-                  'Calculate holiday as working',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-                subtitle: Text(
-                  'When enabled, holidays will be treated as regular working days in statistics calculation.',
-                  style: TextStyle(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-                value: calculateAsWorking,
-                onChanged: (value) {
-                  ref.read(adminServiceProvider).updateGlobalConfig({
-                    'calculateHolidayAsWorking': value,
-                  });
-                },
-                activeThumbColor: AppTheme.primaryColor,
-              ),
-            ),
-            const SizedBox(height: 16),
             Card(
               child: SwitchListTile(
                 title: Text(

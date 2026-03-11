@@ -48,7 +48,7 @@ class AutoCheckInEnabledNotifier extends Notifier<bool> {
   @override
   bool build() {
     final prefs = ref.watch(sharedPreferencesProvider);
-    return prefs.getBool('auto_checkin_enabled') ?? true;
+    return prefs.getBool('auto_checkin_enabled') ?? false;
   }
 
   Future<void> toggle(bool value) async {
@@ -67,6 +67,7 @@ class AutoCheckInEnabledNotifier extends Notifier<bool> {
           'notification_hour': ref.read(notificationTimeProvider).hour,
           'notification_minute': ref.read(notificationTimeProvider).minute,
           'geofence_radius': ref.read(geofenceRadiusProvider),
+          'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
         });
       }
     });
@@ -103,6 +104,7 @@ class GeofenceRadiusNotifier extends Notifier<int> {
           'notifications_enabled': ref.read(notificationEnabledProvider),
           'notification_hour': ref.read(notificationTimeProvider).hour,
           'notification_minute': ref.read(notificationTimeProvider).minute,
+          'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
         });
       }
     });
@@ -225,6 +227,7 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
           'notification_minute': ref.read(notificationTimeProvider).minute,
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
+          'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
         });
       }
     });
@@ -269,6 +272,7 @@ class NotificationEnabledNotifier extends Notifier<bool> {
           'notification_minute': time.minute,
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
+          'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
         });
       }
     });
@@ -315,6 +319,44 @@ class NotificationTimeNotifier extends Notifier<TimeOfDay> {
           'theme_mode': themeIndex,
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
+          'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+        });
+      }
+    });
+  }
+}
+
+final calculateHolidayAsWorkingProvider =
+    NotifierProvider<CalculateHolidayAsWorkingNotifier, bool>(
+      CalculateHolidayAsWorkingNotifier.new,
+    );
+
+class CalculateHolidayAsWorkingNotifier extends Notifier<bool> {
+  Timer? _debounce;
+
+  @override
+  bool build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    return prefs.getBool('calculateHolidayAsWorking') ?? false;
+  }
+
+  Future<void> toggle(bool value) async {
+    state = value;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool('calculateHolidayAsWorking', value);
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 2), () async {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        await ref.read(authServiceProvider).updateUserSettings(user.uid, {
+          'calculateHolidayAsWorking': value,
+          'theme_mode': ref.read(themeModeProvider).index,
+          'notifications_enabled': ref.read(notificationEnabledProvider),
+          'notification_hour': ref.read(notificationTimeProvider).hour,
+          'notification_minute': ref.read(notificationTimeProvider).minute,
+          'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
+          'geofence_radius': ref.read(geofenceRadiusProvider),
         });
       }
     });
@@ -338,6 +380,7 @@ Future<void> refreshSmartNotifications(
 
   final time = targetTime ?? ref.read(notificationTimeProvider);
   final holidays = ref.read(holidaysStreamProvider).value ?? <DateTime>[];
+  final calculateHolidayAsWorking = ref.read(calculateHolidayAsWorkingProvider);
 
   final currentYear = DateTime.now().year;
   final logsAsync = ref.read(yearlyAttendanceProvider(currentYear));
@@ -355,5 +398,6 @@ Future<void> refreshSmartNotifications(
     time: time,
     holidays: holidays,
     loggedDates: loggedDates,
+    calculateHolidayAsWorking: calculateHolidayAsWorking,
   );
 }

@@ -79,13 +79,15 @@ class NotificationService {
     required TimeOfDay time,
     required List<DateTime> holidays,
     required List<DateTime> loggedDates,
+    bool calculateHolidayAsWorking = false,
   }) async {
     await cancelAllNotifications();
 
     final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
     LoggerService.instance.info(
       'NotificationService: scheduling smart notifications '
-      '(hour: ${time.hour}, minute: ${time.minute})',
+      '(hour: ${time.hour}, minute: ${time.minute}, '
+      'calculateHolidayAsWorking: $calculateHolidayAsWorking)',
       type: LogType.system,
     );
 
@@ -117,15 +119,17 @@ class NotificationService {
       }
 
       // Check 2: Holiday
-      bool isHoliday = holidays.any(
-        (h) =>
-            h.year == dateToEvaluate.year &&
-            h.month == dateToEvaluate.month &&
-            h.day == dateToEvaluate.day,
-      );
-      if (isHoliday) {
-        daysOffset++;
-        continue;
+      if (!calculateHolidayAsWorking) {
+        bool isHoliday = holidays.any(
+          (h) =>
+              h.year == dateToEvaluate.year &&
+              h.month == dateToEvaluate.month &&
+              h.day == dateToEvaluate.day,
+        );
+        if (isHoliday) {
+          daysOffset++;
+          continue;
+        }
       }
 
       // Check 3: Already Logged

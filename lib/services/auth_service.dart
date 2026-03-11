@@ -223,6 +223,16 @@ class AuthService {
     });
   }
 
+  Future<void> completeOnboarding(
+    String uid,
+    Map<String, dynamic> settings,
+  ) async {
+    await _firestore.collection('users').doc(uid).update({
+      'isOnboardingCompleted': true,
+      'settings': settings,
+    });
+  }
+
   Future<void> updateUserSelectedHolidays(
     String uid,
     List<String> holidayIds,

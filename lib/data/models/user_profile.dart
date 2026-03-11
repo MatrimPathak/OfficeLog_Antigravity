@@ -10,6 +10,7 @@ class UserProfile {
   final double? officeLat;
   final double? officeLng;
   final bool isAdmin;
+  final bool isOnboardingCompleted;
   final Map<String, dynamic> settings;
   final List<String>? selectedHolidays;
   final List<Holiday>? customHolidays;
@@ -24,6 +25,7 @@ class UserProfile {
     this.officeLat,
     this.officeLng,
     this.isAdmin = false,
+    this.isOnboardingCompleted = false,
     this.settings = const {},
     this.selectedHolidays,
     this.customHolidays,
@@ -40,6 +42,7 @@ class UserProfile {
       'officeLat': officeLat,
       'officeLng': officeLng,
       'isAdmin': isAdmin,
+      'isOnboardingCompleted': isOnboardingCompleted,
       'settings': settings,
       'selectedHolidays': selectedHolidays,
       'customHolidays': customHolidays?.map((h) => h.toMap()).toList(),
@@ -57,6 +60,7 @@ class UserProfile {
       officeLat: map['officeLat'],
       officeLng: map['officeLng'],
       isAdmin: map['isAdmin'] ?? false,
+      isOnboardingCompleted: map['isOnboardingCompleted'] ?? false,
       settings: map['settings'] ?? {},
       selectedHolidays: map['selectedHolidays'] != null
           ? List<String>.from(map['selectedHolidays'])

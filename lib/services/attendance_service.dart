@@ -28,7 +28,7 @@ class AttendanceService {
       await _attendanceCollection
           .doc(log.id)
           .set(log.toMap())
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 5));
 
       // Update local status to synced
       var updatedLog = AttendanceLog(
@@ -58,7 +58,7 @@ class AttendanceService {
       await _attendanceCollection
           .doc(log.id)
           .set(log.toMap(), SetOptions(merge: true))
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 5));
 
       var updatedLog = AttendanceLog(
         id: log.id,
@@ -105,7 +105,7 @@ class AttendanceService {
           .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
           .where('date', isLessThanOrEqualTo: Timestamp.fromDate(end))
           .get(const GetOptions(source: Source.serverAndCache))
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 5));
 
       return snapshot.docs.map((doc) {
         return AttendanceLog.fromMap(doc.data() as Map<String, dynamic>);
