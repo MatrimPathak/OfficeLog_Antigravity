@@ -8,6 +8,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../data/models/user_profile.dart';
 import '../data/models/holiday.dart';
+import 'migration_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -45,6 +46,12 @@ class AuthService {
 
       if (user != null) {
         await _saveUserToFirestore(user);
+        
+        // Trigger migration asynchronously after successful login
+        debugPrint("AuthService: Triggering migration check for Google Sign-In...");
+        MigrationService().autoMigrateUserData().catchError((e) {
+          debugPrint("AuthService: Background migration check failed for Google Sign-In: $e");
+        });
       }
 
       return user;
@@ -81,6 +88,12 @@ class AuthService {
 
         if (user != null) {
           await _saveUserToFirestore(user);
+          
+          // Trigger migration asynchronously after successful login
+          debugPrint("AuthService: Triggering migration check for Apple Sign-In (iOS)...");
+          MigrationService().autoMigrateUserData().catchError((e) {
+            debugPrint("AuthService: Background migration check failed for Apple Sign-In: $e");
+          });
         }
 
         return user;
@@ -96,6 +109,12 @@ class AuthService {
 
         if (user != null) {
           await _saveUserToFirestore(user);
+          
+          // Trigger migration asynchronously after successful login
+          debugPrint("AuthService: Triggering migration check for Apple Sign-In (Web/Other)...");
+          MigrationService().autoMigrateUserData().catchError((e) {
+            debugPrint("AuthService: Background migration check failed for Apple Sign-In: $e");
+          });
         }
 
         return user;
