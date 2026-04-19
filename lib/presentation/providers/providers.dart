@@ -370,7 +370,7 @@ Future<void> refreshSmartNotifications(
 }) async {
   // Add a small propagation delay to allow Firestore local cache to update the Streams
   // before we rely on them for scheduling.
-  await Future.delayed(const Duration(milliseconds: 400));
+  await Future.delayed(const Duration(milliseconds: 300));
 
   final enabled = isEnabled ?? ref.read(notificationEnabledProvider);
   if (!enabled) {
@@ -378,26 +378,57 @@ Future<void> refreshSmartNotifications(
     return;
   }
 
+  final user = ref.read(currentUserProvider);
+  if (user == null) return;
+
   final time = targetTime ?? ref.read(notificationTimeProvider);
   final holidays = ref.read(holidaysStreamProvider).value ?? <DateTime>[];
   final calculateHolidayAsWorking = ref.read(calculateHolidayAsWorkingProvider);
 
   final currentYear = DateTime.now().year;
   final logsAsync = ref.read(yearlyAttendanceProvider(currentYear));
-  final List<DateTime> loggedDates = [];
+  final Set<DateTime> loggedDatesSet = {};
 
+  // 1. Add dates from Firestore
   if (logsAsync.value != null) {
     for (var log in logsAsync.value!) {
-      if (log.date != null) {
-        loggedDates.add(log.date as DateTime);
-      }
+      loggedDatesSet.add(log.date as DateTime);
     }
   }
+
+  // 2. Add dates from local Hive cache (More authoritative for immediate feedback)
+  final service = AttendanceService(user.uid);
+  final cachedDates = await service.getCachedLoggedDates();
+  loggedDatesSet.addAll(cachedDates);
 
   await NotificationService.scheduleSmartNotifications(
     time: time,
     holidays: holidays,
-    loggedDates: loggedDates,
+    loggedDates: loggedDatesSet.toList(),
     calculateHolidayAsWorking: calculateHolidayAsWorking,
   );
 }
+
+// Provider to keep notifications in sync with attendance state
+final notificationSchedulerProvider = Provider<void>((ref) {
+  final isEnabled = ref.watch(notificationEnabledProvider);
+  if (!isEnabled) return;
+
+  final currentYear = DateTime.now().year;
+  
+  ref.listen(yearlyAttendanceProvider(currentYear), (previous, next) {
+    refreshSmartNotifications(ref);
+  });
+  
+  ref.listen(holidaysStreamProvider, (previous, next) {
+    refreshSmartNotifications(ref);
+  });
+
+  ref.listen(notificationTimeProvider, (previous, next) {
+    refreshSmartNotifications(ref);
+  });
+
+  ref.listen(calculateHolidayAsWorkingProvider, (previous, next) {
+    refreshSmartNotifications(ref);
+  });
+});

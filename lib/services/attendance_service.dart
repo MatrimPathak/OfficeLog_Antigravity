@@ -107,9 +107,11 @@ class AttendanceService {
           .get(const GetOptions(source: Source.serverAndCache))
           .timeout(const Duration(seconds: 5));
 
-      return snapshot.docs.map((doc) {
+      final logs = snapshot.docs.map((doc) {
         return AttendanceLog.fromMap(doc.data() as Map<String, dynamic>);
       }).toList();
+
+      return _deduplicateLogs(logs);
     } catch (e) {
       // Fallback to cache only if server fetch fails or times out
       try {
@@ -128,9 +130,11 @@ class AttendanceService {
             )
             .get(const GetOptions(source: Source.cache));
 
-        return snapshot.docs.map((doc) {
+        final logs = snapshot.docs.map((doc) {
           return AttendanceLog.fromMap(doc.data() as Map<String, dynamic>);
         }).toList();
+
+        return _deduplicateLogs(logs);
       } catch (_) {
         return [];
       }
@@ -148,9 +152,10 @@ class AttendanceService {
         .where('date', isLessThanOrEqualTo: Timestamp.fromDate(end))
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs.map((doc) {
+          final logs = snapshot.docs.map((doc) {
             return AttendanceLog.fromMap(doc.data() as Map<String, dynamic>);
           }).toList();
+          return _deduplicateLogs(logs);
         });
   }
 
@@ -163,10 +168,63 @@ class AttendanceService {
         .where('date', isLessThanOrEqualTo: Timestamp.fromDate(end))
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs.map((doc) {
+          final logs = snapshot.docs.map((doc) {
             return AttendanceLog.fromMap(doc.data() as Map<String, dynamic>);
           }).toList();
+          return _deduplicateLogs(logs);
         });
+  }
+
+  /// Prioritizes logs with date-based IDs (YYYY-M-D) over legacy timestamp IDs.
+  List<AttendanceLog> _deduplicateLogs(List<AttendanceLog> logs) {
+    if (logs.isEmpty) return logs;
+
+    final Map<String, AttendanceLog> dateMap = {};
+
+    for (var log in logs) {
+      final dateKey =
+          "${log.date.year}-${log.date.month}-${log.date.day}";
+      final existing = dateMap[dateKey];
+
+      if (existing == null) {
+        dateMap[dateKey] = log;
+        continue;
+      }
+
+      // Check if current log has a date-based ID (contains a hyphen in the suffix)
+      // ID format is: USERID_YYYY-M-D
+      final isNewFormat = log.id.split('_').last.contains('-');
+      final isExistingNewFormat = existing.id.split('_').last.contains('-');
+
+      if (isNewFormat && !isExistingNewFormat) {
+        // Priority: Date-based ID wins over timestamp ID
+        dateMap[dateKey] = log;
+      } else if (isNewFormat == isExistingNewFormat) {
+        // If both are same format, keep the one with more sessions or just the latest one
+        if (log.sessions.length > existing.sessions.length) {
+          dateMap[dateKey] = log;
+        }
+      }
+    }
+
+    return dateMap.values.toList();
+  }
+
+  /// Returns a list of dates that have already been logged in the local Hive cache.
+  /// Useful for immediate UI/Notification feedback before Firestore sync completes.
+  Future<List<DateTime>> getCachedLoggedDates() async {
+    try {
+      final box = await Hive.openBox<Map>('attendance_logs');
+      final logs = box.values
+          .map((e) => AttendanceLog.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+      
+      // We deduplicate by day here as well
+      final deduplicated = _deduplicateLogs(logs);
+      return deduplicated.map((l) => l.date).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<List<int>> getActiveYears() async {

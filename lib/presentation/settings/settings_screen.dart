@@ -335,25 +335,64 @@ class SettingsScreen extends ConsumerWidget {
                     value: ref.watch(autoCheckInEnabledProvider),
                     onChanged: (val) async {
                       if (val) {
-                        await _checkLocationPermission(context);
                         final permission = await Geolocator.checkPermission();
-                        if (permission == LocationPermission.always) {
-                          await ref
-                              .read(autoCheckInEnabledProvider.notifier)
-                              .toggle(true);
-                          if (context.mounted) {
-                            await ref
-                                .read(autoCheckInServiceProvider)
-                                .initGeofence();
+                        if (permission != LocationPermission.always) {
+                          if (!context.mounted) return;
+                          
+                          // Explain why we need "Always"
+                          final proceed = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Location Permission'),
+                              content: const Text(
+                                'Auto check-in requires "Always Allow" location permission to work in the background. '
+                                'Please grant this in the next prompt.'
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text('Grant'),
+                                ),
+                              ],
+                            ),
+                          ) ?? false;
+
+                          if (!proceed) return;
+
+                          await _checkLocationPermission(context);
+                          final newPermission = await Geolocator.checkPermission();
+                          if (newPermission != LocationPermission.always) {
+                            if (context.mounted) {
+                              AppTheme.showErrorSnackBar(
+                                context, 
+                                'Permission must be "Always Allow" for auto check-in.'
+                              );
+                            }
+                            return;
                           }
+                        }
+
+                        await ref
+                            .read(autoCheckInEnabledProvider.notifier)
+                            .toggle(true);
+                        if (context.mounted) {
+                          await ref
+                              .read(autoCheckInServiceProvider)
+                              .initGeofence();
                         }
                       } else {
                         await ref
                             .read(autoCheckInEnabledProvider.notifier)
                             .toggle(false);
-                        await ref
-                            .read(autoCheckInServiceProvider)
-                            .stopGeofence();
+                        if (context.mounted) {
+                          await ref
+                              .read(autoCheckInServiceProvider)
+                              .stopGeofence();
+                        }
                       }
                     },
                     activeThumbColor: AppTheme.warningColor,
@@ -667,11 +706,39 @@ class SettingsScreen extends ConsumerWidget {
       permission = await Geolocator.requestPermission();
     }
 
-    if (!context.mounted) return;
+    if (permission == LocationPermission.deniedForever) {
+      if (context.mounted) {
+        final openSettings = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Permission Required'),
+            content: const Text(
+              'Location permission is permanently denied. Please enable it in settings to use auto check-in.'
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Open Settings'),
+              ),
+            ],
+          ),
+        ) ?? false;
 
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      AppTheme.showErrorSnackBar(context, 'Location permission is denied.');
+        if (openSettings) {
+          await Geolocator.openAppSettings();
+        }
+      }
+      return;
+    }
+
+    if (permission == LocationPermission.denied) {
+      if (context.mounted) {
+        AppTheme.showErrorSnackBar(context, 'Location permission is denied.');
+      }
       return;
     }
 

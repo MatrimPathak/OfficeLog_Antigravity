@@ -724,9 +724,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: daysInMonth * 30.0, // Dynamic width for scrollability
+                width: daysInMonth * 20.0, // Reduced width to bring bars closer
                 child: BarChart(
                   BarChartData(
+                    barTouchData: BarTouchData(
+                      touchTooltipData: BarTouchTooltipData(
+                        getTooltipColor: (_) =>
+                            Theme.of(context).cardTheme.color ??
+                            const Color(0xFF1A2C42),
+                        fitInsideHorizontally: true,
+                        fitInsideVertically: true,
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          return BarTooltipItem(
+                            '${rod.toY.toStringAsFixed(1)}h',
+                            const TextStyle(
+                              color: AppTheme.primaryColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                     gridData: const FlGridData(show: false),
                     titlesData: FlTitlesData(
                       leftTitles: const AxisTitles(

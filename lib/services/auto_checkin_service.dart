@@ -55,7 +55,7 @@ class AutoCheckInService {
       androidSettings: AndroidGeofenceSettings(
         initialTriggers: {GeofenceEvent.enter, GeofenceEvent.dwell},
         expiration: const Duration(days: 9999),
-        loiteringDelay: const Duration(seconds: 10),
+        loiteringDelay: const Duration(minutes: 1),
         notificationResponsiveness: const Duration(
           seconds: 0,
         ), // Max responsiveness

@@ -661,9 +661,27 @@ class SummaryScreen extends ConsumerWidget {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: 600, // Fixed width for scrollability
+                width: 420, // Reduced width to bring bars closer
                 child: BarChart(
                   BarChartData(
+                    barTouchData: BarTouchData(
+                      touchTooltipData: BarTouchTooltipData(
+                        getTooltipColor: (_) =>
+                            Theme.of(context).cardTheme.color ??
+                            const Color(0xFF1A2C42),
+                        fitInsideHorizontally: true,
+                        fitInsideVertically: true,
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          return BarTooltipItem(
+                            '${rod.toY.toStringAsFixed(0)}%',
+                            TextStyle(
+                              color: AppTheme.primaryColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                     gridData: const FlGridData(show: false),
                     titlesData: FlTitlesData(
                       leftTitles: const AxisTitles(
@@ -824,9 +842,27 @@ class SummaryScreen extends ConsumerWidget {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: 600, // Fixed width for scrollability
+                width: 420, // Reduced width to bring bars closer
                 child: BarChart(
                   BarChartData(
+                    barTouchData: BarTouchData(
+                      touchTooltipData: BarTouchTooltipData(
+                        getTooltipColor: (_) =>
+                            Theme.of(context).cardTheme.color ??
+                            const Color(0xFF1A2C42),
+                        fitInsideHorizontally: true,
+                        fitInsideVertically: true,
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          return BarTooltipItem(
+                            '${rod.toY.toStringAsFixed(1)}h',
+                            TextStyle(
+                              color: Colors.blueAccent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                     gridData: const FlGridData(show: false),
                     titlesData: FlTitlesData(
                       leftTitles: const AxisTitles(

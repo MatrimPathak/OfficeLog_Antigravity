@@ -41,6 +41,9 @@ class MyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
     final themeMode = ref.watch(themeModeProvider);
+    
+    // Initialize notification scheduler
+    ref.watch(notificationSchedulerProvider);
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,

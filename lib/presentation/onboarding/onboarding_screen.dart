@@ -207,7 +207,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
           // Full Screen Map
@@ -319,11 +319,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                   ),
                   // Search Suggestions List
-                  if (_isMapSearching ||
-                      _searchResults.isNotEmpty ||
-                      (_searchController.text.length >= 2 &&
-                          !_isMapSearching &&
-                          _searchResults.isEmpty))
+                  if (_isMapSearching || _searchResults.isNotEmpty)
                     Card(
                       elevation: 8,
                       margin: const EdgeInsets.only(top: 4),
@@ -413,10 +409,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   ),
                 ],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Text(
                     'Set Your Office',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -514,6 +511,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ),
             ),
           ),
+        ),
         ],
       ),
     );

@@ -29,7 +29,7 @@ class _SelectHolidaysOnboardingScreenState
     super.initState();
     _searchController.addListener(() {
       setState(() {
-        _searchQuery = _searchController.text.toLowerCase();
+        _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
   }
@@ -94,15 +94,20 @@ class _SelectHolidaysOnboardingScreenState
                 // Search query filter
                 if (_searchQuery.isEmpty) return true;
 
-                final matchesName = holiday.name.toLowerCase().contains(
-                  _searchQuery,
-                );
+                final searchTerms = _searchQuery.split(' ').where((s) => s.isNotEmpty);
                 final formattedDate = DateFormat.yMMMd()
                     .format(holiday.date)
                     .toLowerCase();
-                final matchesDate = formattedDate.contains(_searchQuery);
-                return matchesName || matchesDate;
+                
+                return searchTerms.every((term) => 
+                  holiday.name.toLowerCase().contains(term) || 
+                  formattedDate.contains(term)
+                );
               }).toList();
+
+              final allFilteredSelected = filteredHolidays.every(
+                (h) => _selectedHolidays.contains(h.id),
+              );
 
               return Column(
                 children: [
@@ -122,30 +127,62 @@ class _SelectHolidaysOnboardingScreenState
                           ),
                         ),
                         const SizedBox(height: 16),
-                        TextField(
-                          controller: _searchController,
-                          decoration: InputDecoration(
-                            hintText: 'Search holidays...',
-                            hintStyle: TextStyle(
-                              color: Colors.grey.withValues(alpha: 0.6),
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search,
-                              color: AppTheme.primaryColor.withValues(
-                                alpha: 0.7,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                decoration: InputDecoration(
+                                  hintText: 'Search holidays...',
+                                  hintStyle: TextStyle(
+                                    color: Colors.grey.withValues(alpha: 0.6),
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.search,
+                                    color: AppTheme.primaryColor.withValues(
+                                      alpha: 0.7,
+                                    ),
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  filled: true,
+                                  fillColor: Theme.of(context).cardTheme.color,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 0,
+                                    horizontal: 16,
+                                  ),
+                                ),
                               ),
                             ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide.none,
+                            const SizedBox(width: 8),
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  if (allFilteredSelected) {
+                                    for (var h in filteredHolidays) {
+                                      _selectedHolidays.remove(h.id);
+                                    }
+                                  } else {
+                                    for (var h in filteredHolidays) {
+                                      _selectedHolidays.add(h.id);
+                                    }
+                                  }
+                                });
+                              },
+                              icon: Icon(
+                                allFilteredSelected
+                                    ? Icons.deselect
+                                    : Icons.select_all,
+                                size: 20,
+                              ),
+                              label: Text(
+                                allFilteredSelected ? 'None' : 'All',
+                                style: const TextStyle(fontSize: 12),
+                              ),
                             ),
-                            filled: true,
-                            fillColor: Theme.of(context).cardTheme.color,
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 0,
-                              horizontal: 16,
-                            ),
-                          ),
+                          ],
                         ),
                       ],
                     ),
