@@ -185,12 +185,14 @@ class YearlyStatsResult {
   final int year;
   final int ytdPresent;
   final int ytdRequired;
-  final int totalYearlyRequired; // New field for full year requirement
+  final int totalYearlyRequired;
   final double overallAttendance; // percentage 0-100
   final String bestMonthName;
   final double bestMonthPercentage;
   final List<MonthlyStats> monthlyBreakdown;
   final Map<int, double> quarterlyPerformance; // 1-4 : percentage
+  final double ytdTotalHours;
+  final double ytdAvgHoursPerDay;
 
   int getNetBalanceUpTo(int targetMonth) {
     int requestedPresent = 0;
@@ -216,6 +218,8 @@ class YearlyStatsResult {
     required this.bestMonthPercentage,
     required this.monthlyBreakdown,
     required this.quarterlyPerformance,
+    this.ytdTotalHours = 0.0,
+    this.ytdAvgHoursPerDay = 0.0,
   });
 }
 
@@ -228,6 +232,9 @@ class MonthlyStats {
   final int holidayDays;
   final double attendancePercentage;
   final double totalHours;
+
+  double get avgHoursPerDay =>
+      presentDays > 0 ? totalHours / presentDays : 0.0;
 
   MonthlyStats({
     required this.month,
@@ -386,6 +393,15 @@ extension YearlyCalculator on StatsCalculator {
       quarterly[q] = qPct;
     }
 
+    double ytdTotalHours = 0.0;
+    for (var m in monthlyBreakdown) {
+      if (DateTime(year, m.month, 1).isBefore(DateTime.now())) {
+        ytdTotalHours += m.totalHours;
+      }
+    }
+    final double ytdAvgHoursPerDay =
+        ytdPresent > 0 ? ytdTotalHours / ytdPresent : 0.0;
+
     return YearlyStatsResult(
       year: year,
       ytdPresent: ytdPresent,
@@ -396,6 +412,8 @@ extension YearlyCalculator on StatsCalculator {
       bestMonthPercentage: bestMonth?.attendancePercentage ?? 0,
       monthlyBreakdown: monthlyBreakdown,
       quarterlyPerformance: quarterly,
+      ytdTotalHours: ytdTotalHours,
+      ytdAvgHoursPerDay: ytdAvgHoursPerDay,
     );
   }
 }

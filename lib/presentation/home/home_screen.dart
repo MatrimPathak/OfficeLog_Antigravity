@@ -13,6 +13,7 @@ import '../../logic/stats_calculator.dart';
 
 import '../settings/settings_screen.dart';
 import '../summary/summary_screen.dart';
+import '../planning/planning_screen.dart';
 
 import '../../services/auto_checkin_service.dart';
 import '../../services/notification_service.dart';
@@ -296,6 +297,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onPressed: () {
               Navigator.push(
                 context,
+                MaterialPageRoute(builder: (_) => const PlanningScreen()),
+              );
+            },
+            icon: Icon(
+              Icons.event_note_rounded,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+            tooltip: 'Planning Mode',
+          ),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          height: 64,
+          width: 64,
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardTheme.color,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Theme.of(context).dividerColor),
+          ),
+          child: IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
                 MaterialPageRoute(builder: (_) => const SettingsScreen()),
               );
             },
@@ -513,6 +537,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       calculateHolidayAsWorking: calculateHolidayAsWorking,
     );
 
+    double monthTotalHours = 0.0;
+    for (var log in logs) {
+      if (log.date.year == displayDate.year &&
+          log.date.month == displayDate.month) {
+        for (var session in log.sessions) {
+          if (session.outTime != null) {
+            monthTotalHours +=
+                session.outTime!.difference(session.inTime).inMinutes / 60.0;
+          }
+        }
+      }
+    }
+    final double avgHoursPerDay =
+        stats.logged > 0 ? monthTotalHours / stats.logged : 0.0;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -585,6 +624,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                context,
+                'Total Hrs',
+                monthTotalHours > 0
+                    ? '${monthTotalHours.toStringAsFixed(1)}h'
+                    : '-',
+                Colors.blueAccent,
+                null,
+                unitLabel: 'Hours',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildStatCard(
+                context,
+                'Avg/Day',
+                avgHoursPerDay > 0
+                    ? '${avgHoursPerDay.toStringAsFixed(1)}h'
+                    : '-',
+                Colors.blueAccent,
+                null,
+                unitLabel: 'Hrs/Day',
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 24),
         const Text(
           'MONTHLY TREND (HOURS)',
@@ -606,8 +675,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     String label,
     String value,
     Color valueColor,
-    IconData? icon,
-  ) {
+    IconData? icon, {
+    String? unitLabel,
+  }) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
@@ -633,7 +703,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              value == '1' ? 'Day' : 'Days',
+              unitLabel ?? (value == '1' ? 'Day' : 'Days'),
               style: TextStyle(color: Colors.grey[600], fontSize: 10),
             ),
           ],
