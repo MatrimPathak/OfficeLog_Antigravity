@@ -368,6 +368,10 @@ Future<void> refreshSmartNotifications(
   bool? isEnabled,
   TimeOfDay? targetTime,
 }) async {
+  // Cancel immediately to prevent any pending notification from firing
+  // during the propagation delay window below.
+  await NotificationService.cancelAllNotifications();
+
   // Add a small propagation delay to allow Firestore local cache to update the Streams
   // before we rely on them for scheduling.
   await Future.delayed(const Duration(milliseconds: 300));
@@ -432,3 +436,62 @@ final notificationSchedulerProvider = Provider<void>((ref) {
     refreshSmartNotifications(ref);
   });
 });
+
+// Planned office days for leave planning
+final plannedDatesProvider =
+    NotifierProvider<PlannedDatesNotifier, List<DateTime>>(
+      PlannedDatesNotifier.new,
+    );
+
+class PlannedDatesNotifier extends Notifier<List<DateTime>> {
+  static const _prefsKey = 'planned_office_days';
+  Future<void> _writeQueue = Future.value();
+
+  @override
+  List<DateTime> build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    final raw = prefs.getStringList(_prefsKey) ?? [];
+    return raw.map((s) => DateTime.tryParse(s)).whereType<DateTime>().toList();
+  }
+
+  Future<void> _persistDates(List<DateTime> dates) {
+    final prefs = ref.read(sharedPreferencesProvider);
+    final payload = dates.map((d) => d.toIso8601String()).toList();
+    _writeQueue = _writeQueue
+        .then((_) => prefs.setStringList(_prefsKey, payload))
+        .catchError((_) {});
+    return _writeQueue;
+  }
+
+  Future<void> toggle(DateTime date) async {
+    final normalized = DateTime(date.year, date.month, date.day);
+    final current = List<DateTime>.from(state);
+    final exists = current.any(
+      (d) =>
+          d.year == normalized.year &&
+          d.month == normalized.month &&
+          d.day == normalized.day,
+    );
+    if (exists) {
+      current.removeWhere(
+        (d) =>
+            d.year == normalized.year &&
+            d.month == normalized.month &&
+            d.day == normalized.day,
+      );
+    } else {
+      current.add(normalized);
+    }
+    state = current;
+    await _persistDates(current);
+  }
+
+  Future<void> clear() async {
+    state = [];
+    final prefs = ref.read(sharedPreferencesProvider);
+    _writeQueue = _writeQueue
+        .then((_) => prefs.remove(_prefsKey))
+        .catchError((_) {});
+    await _writeQueue;
+  }
+}

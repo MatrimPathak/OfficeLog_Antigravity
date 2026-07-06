@@ -361,8 +361,26 @@ class SummaryScreen extends ConsumerWidget {
                   '${currentMonthStats.requiredDays} Days',
                   Theme.of(context).colorScheme.onSurface,
                 ),
+                Container(
+                  width: 1,
+                  height: 30,
+                  color: Theme.of(context).dividerColor,
+                ),
+                _buildStatColumn(
+                  context,
+                  'Total Hrs',
+                  '${currentMonthStats.totalHours.toStringAsFixed(1)}h',
+                  Theme.of(context).colorScheme.onSurface,
+                ),
               ],
             ),
+            if (currentMonthStats.presentDays > 0) ...[
+              const SizedBox(height: 8),
+              Text(
+                'avg ${currentMonthStats.avgHoursPerDay.toStringAsFixed(1)} h/day',
+                style: const TextStyle(color: Colors.grey, fontSize: 11),
+              ),
+            ],
             const SizedBox(height: 20),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
@@ -463,7 +481,7 @@ class SummaryScreen extends ConsumerWidget {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
-      childAspectRatio: 1.6, // Wider cards
+      childAspectRatio: 1.6,
       children: [
         _buildHighlightCard(
           context,
@@ -487,6 +505,18 @@ class SummaryScreen extends ConsumerWidget {
           context,
           'Overall Attendance',
           '${stats.overallAttendance.toStringAsFixed(0)}%',
+          Theme.of(context).colorScheme.onSurface,
+        ),
+        _buildHighlightCard(
+          context,
+          'YTD Hours',
+          '${stats.ytdTotalHours.toStringAsFixed(1)}h',
+          Theme.of(context).colorScheme.onSurface,
+        ),
+        _buildHighlightCard(
+          context,
+          'Avg Hrs/Day',
+          '${stats.ytdAvgHoursPerDay.toStringAsFixed(1)}h',
           Theme.of(context).colorScheme.onSurface,
         ),
       ],
@@ -1048,18 +1078,33 @@ class SummaryScreen extends ConsumerWidget {
               return Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 16,
+                  vertical: 12,
                 ),
                 child: Row(
                   children: [
                     Expanded(
                       flex: 4,
-                      child: Text(
-                        item.monthName,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.monthName,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          if (!isFuture && item.totalHours > 0) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '${item.totalHours.toStringAsFixed(1)}h total',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     Expanded(
@@ -1087,11 +1132,25 @@ class SummaryScreen extends ConsumerWidget {
                     Expanded(
                       flex: 2,
                       child: Center(
-                        child: Text(
-                          isFuture ? '-' : '${item.presentDays}',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
+                        child: Column(
+                          children: [
+                            Text(
+                              isFuture ? '-' : '${item.presentDays}',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                            if (!isFuture && item.presentDays > 0) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                '${item.avgHoursPerDay.toStringAsFixed(1)}h/d',
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
