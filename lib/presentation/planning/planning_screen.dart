@@ -29,6 +29,8 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
     final yearlyLogsAsync = ref.watch(yearlyAttendanceProvider(now.year));
     final holidaysAsync = ref.watch(holidaysStreamProvider);
     final calculateAsWorking = ref.watch(calculateHolidayAsWorkingProvider);
+    final rules = ref.watch(attendanceRulesConfigProvider);
+    final workingWeekdays = rules.workingWeekdays;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -80,6 +82,7 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
             year: now.year,
             logs: logs,
             holidays: holidays,
+            rules: rules,
             calculateHolidayAsWorking: calculateAsWorking,
           );
 
@@ -88,8 +91,7 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
                 (d) =>
                     d.year == now.year &&
                     d.isAfter(today) &&
-                    d.weekday != DateTime.saturday &&
-                    d.weekday != DateTime.sunday &&
+                    workingWeekdays.contains(d.weekday) &&
                     !holidays.any(
                       (h) =>
                           h.year == d.year &&
@@ -140,7 +142,11 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
                       availableCalendarFormats: const {
                         CalendarFormat.month: 'Month',
                       },
-                      startingDayOfWeek: StartingDayOfWeek.sunday,
+                      startingDayOfWeek: StartingDayOfWeek.values[rules.weekStartDay - 1],
+                      weekendDays: [
+                        for (int d = 1; d <= 7; d++)
+                          if (!workingWeekdays.contains(d)) d,
+                      ],
                       headerStyle: HeaderStyle(
                         formatButtonVisible: false,
                         titleCentered: true,
@@ -192,8 +198,7 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
                           selectedDay.day,
                         );
                         if (!normalized.isAfter(today)) return;
-                        if (selectedDay.weekday == DateTime.saturday ||
-                            selectedDay.weekday == DateTime.sunday) {
+                        if (!workingWeekdays.contains(selectedDay.weekday)) {
                           return;
                         }
                         final isHoliday = holidays.any(
@@ -208,9 +213,9 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
                       },
                       calendarBuilders: CalendarBuilders(
                         markerBuilder: (context, day, events) {
-                          final isWeekend =
-                              day.weekday == DateTime.saturday ||
-                              day.weekday == DateTime.sunday;
+                          final isWeekend = !workingWeekdays.contains(
+                            day.weekday,
+                          );
                           if (isWeekend) return null;
 
                           final isHoliday = holidays.any(
@@ -300,7 +305,7 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Text(
-                    'Tap a future weekday to add or remove it from your plan.',
+                    'Tap a future working day to add or remove it from your plan.',
                     style: TextStyle(
                       color: Colors.grey[500],
                       fontSize: 12,

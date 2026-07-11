@@ -1,41 +1,30 @@
+import 'dart:math';
 import '../data/models/attendance_log.dart';
+import '../data/models/attendance_rules.dart';
 
 class StatsCalculator {
-  /// Calculates the number of working days in a week given a list of holidays in that week.
-  /// Working days are Mon-Fri excluding holidays.
-  static int calculateWorkingDaysInWeek(
-    DateTime startOfWeek,
-    List<DateTime> holidaysInWeek,
-  ) {
-    int workingDays = 0;
-    // Iterate from Monday (0) to Friday (4)
-    for (int i = 0; i < 5; i++) {
-      DateTime day = startOfWeek.add(Duration(days: i));
-      // Check if this day is a holiday
-      bool isHoliday = holidaysInWeek.any((h) => isSameDay(h, day));
-      if (!isHoliday) {
-        workingDays++;
-      }
-    }
-    return workingDays;
-  }
-
-  /// Calculates required days based on the rules:
-  /// 1. 3 days a week
-  /// 2. If a week has 3 or less days all are required
-  /// 3. If full week (5 working days), 3 required.
-  /// 4. Holidays reduce requirement:
-  ///    - 1 holiday -> 3 required (same as full)
-  ///    - 2 holidays -> 3 required
-  ///    - 3 holidays -> 2 required
-  ///    - 4 holidays -> 1 required
-  ///    - 5 holidays -> 0 required
-  static int calculateRequiredDays(int workingDaysInWeek, int holidaysCount) {
-    return workingDaysInWeek >= 3 ? 3 : workingDaysInWeek;
-  }
-
   static bool isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  /// Resolves how many days are required for a period given how many
+  /// working days were scheduled vs actually available (i.e. not holidays).
+  static int _resolveRequired({
+    required int scheduledWorkingDays,
+    required int availableWorkingDays,
+    required AttendanceRulesConfig rules,
+  }) {
+    final target = rules.computeTargetForScheduledDays(scheduledWorkingDays);
+    switch (rules.holidayReductionMode) {
+      case HolidayReductionMode.fixed:
+        return min(target, scheduledWorkingDays);
+      case HolidayReductionMode.matchAvailableDays:
+        return min(target, availableWorkingDays);
+      case HolidayReductionMode.customTable:
+        final unavailable = scheduledWorkingDays - availableWorkingDays;
+        final override = rules.customReductionTable[unavailable];
+        return override ?? min(target, availableWorkingDays);
+    }
   }
 
   static StatsResult calculateStats({
@@ -43,6 +32,7 @@ class StatsCalculator {
     required DateTime end,
     required List<AttendanceLog> logs,
     required List<DateTime> holidays,
+    required AttendanceRulesConfig rules,
     bool calculateHolidayAsWorking = false,
   }) {
     int totalRequired = 0;
@@ -60,77 +50,60 @@ class StatsCalculator {
     }).toList();
     totalLogged = rangeLogs.length;
 
-    // Iterate by weeks to calculate requirement
-    // Start from the first Sunday preceding or equal to start
-    // DateTime.weekday: Mon=1, ..., Sun=7.
-    // To get Sunday: if 7 (Sun), subtract 0. If 1 (Mon), subtract 1.
-    // No, wait. If week starts Sunday:
-    // Sunday (7) -> Start of this week.
-    // Monday (1) -> Start - 1?
-    // Let's use % 7.
-    // Mon(1) % 7 = 1. Sun(7) % 7 = 0.
-    // So subtract (weekday % 7).
-    DateTime currentWeekStart = start.subtract(
-      Duration(days: start.weekday % 7),
-    );
+    // Counts a [periodStart, periodEnd] window (inclusive), clipped to
+    // [startDate, endDate], adding to totalRequired/holidayCount.
+    void tallyPeriod(DateTime periodStart, DateTime periodEnd) {
+      int scheduledWorkingDays = 0;
+      int availableWorkingDays = 0;
 
-    // Iterate until we pass the end
-    while (currentWeekStart.isBefore(end.add(const Duration(days: 1)))) {
-      // Identify working days in this week that are ALSO in the requested range
-      int workingDaysInRange = 0;
-
-      // Check Mon-Fri
-      for (int i = 0; i < 5; i++) {
-        // Week starts on Sunday.
-        // i=0 -> Sunday + 0? No.
-        // currentWeekStart is a Sunday.
-        // Mon is index 1. Fri is index 5.
-        // Wait, loop i should be relative to currentWeekStart?
-
-        // currentWeekStart is Sunday.
-        // Mon = currentWeekStart + 1 day
-        // ...
-        // Fri = currentWeekStart + 5 days
-
-        // So we should check indices 1 to 5.
-      }
-
-      // Correct loop: 1 (Mon) to 5 (Fri)
-      for (int i = 1; i <= 5; i++) {
-        DateTime day = currentWeekStart.add(Duration(days: i));
-
-        // Check if day is within range [start, end]
-        final loopDate = DateTime(day.year, day.month, day.day);
-        bool inRange =
-            !loopDate.isBefore(startDate) && !loopDate.isAfter(endDate);
-
-        if (inRange) {
-          bool isHoliday = holidays.any((h) => isSameDay(h, day));
+      DateTime day = DateTime(periodStart.year, periodStart.month, periodStart.day);
+      final normalizedPeriodEnd =
+          DateTime(periodEnd.year, periodEnd.month, periodEnd.day);
+      while (!day.isAfter(normalizedPeriodEnd)) {
+        final inRange = !day.isBefore(startDate) && !day.isAfter(endDate);
+        if (inRange && rules.workingWeekdays.contains(day.weekday)) {
+          scheduledWorkingDays++;
+          final isHoliday = holidays.any((h) => isSameDay(h, day));
           if (isHoliday && !calculateHolidayAsWorking) {
             holidayCount++;
-          }
-
-          if (!isHoliday || calculateHolidayAsWorking) {
-            workingDaysInRange++;
+          } else {
+            availableWorkingDays++;
           }
         }
+        day = day.add(const Duration(days: 1));
       }
 
-      // Calculate required for this week based on available working days in range
-      // Rule: If <= 3 days available, all are required. If > 3, only 3 required.
-      int weeklyRequired = workingDaysInRange >= 3 ? 3 : workingDaysInRange;
-
-      // We no longer calculate weeklyPending here as we use a global subtraction later.
-
-      totalRequired += weeklyRequired;
-
-      currentWeekStart = currentWeekStart.add(const Duration(days: 7));
+      totalRequired += _resolveRequired(
+        scheduledWorkingDays: scheduledWorkingDays,
+        availableWorkingDays: availableWorkingDays,
+        rules: rules,
+      );
     }
 
-    // New Logic: Pending is simply Total Required - Total Logged
-    // This allows "extra" days in one week to visually offset the total count,
-    // resolving the "12 - 9 = 6" confusion.
-    // Re-use totalPending variable declared earlier
+    if (rules.periodType == AttendancePeriodType.monthly) {
+      // Walk calendar months overlapping the range.
+      DateTime monthCursor = DateTime(startDate.year, startDate.month, 1);
+      while (!monthCursor.isAfter(endDate)) {
+        final monthEnd = DateTime(monthCursor.year, monthCursor.month + 1, 0);
+        tallyPeriod(monthCursor, monthEnd);
+        monthCursor = DateTime(monthCursor.year, monthCursor.month + 1, 1);
+      }
+    } else {
+      // Walk weeks overlapping the range, starting on rules.weekStartDay.
+      // DateTime.weekday: Mon=1, ..., Sun=7. This finds the configured
+      // start-of-week on or before `start` (weekStartDay=7 reproduces the
+      // original Sunday-start behavior exactly).
+      final offset = (start.weekday - rules.weekStartDay + 7) % 7;
+      DateTime weekStart = start.subtract(Duration(days: offset));
+      while (weekStart.isBefore(end.add(const Duration(days: 1)))) {
+        final weekEnd = weekStart.add(const Duration(days: 6));
+        tallyPeriod(weekStart, weekEnd);
+        weekStart = weekStart.add(const Duration(days: 7));
+      }
+    }
+
+    // Pending is simply Total Required - Total Logged. This allows "extra"
+    // days in one period to visually offset the total count.
     totalPending = totalRequired - totalLogged;
     if (totalPending < 0) totalPending = 0;
 
@@ -138,12 +111,10 @@ class StatsCalculator {
     if (totalExcess < 0) totalExcess = 0;
 
     int totalBusinessDays = 0;
-    DateTime loopDay =
-        startDate; // Using the normalized start date without time
+    DateTime loopDay = startDate;
 
-    // Iterate day by day from start to end (normalized)
     while (!loopDay.isAfter(endDate)) {
-      if (loopDay.weekday >= 1 && loopDay.weekday <= 5) {
+      if (rules.workingWeekdays.contains(loopDay.weekday)) {
         bool isHoliday = holidays.any((h) => isSameDay(h, loopDay));
         if (!isHoliday || calculateHolidayAsWorking) {
           totalBusinessDays++;
@@ -278,6 +249,7 @@ extension YearlyCalculator on StatsCalculator {
     required int year,
     required List<AttendanceLog> logs,
     required List<DateTime> holidays,
+    required AttendanceRulesConfig rules,
     bool calculateHolidayAsWorking = false,
   }) {
     List<MonthlyStats> monthlyBreakdown = [];
@@ -299,6 +271,7 @@ extension YearlyCalculator on StatsCalculator {
         end: end,
         logs: logs,
         holidays: holidays,
+        rules: rules,
         calculateHolidayAsWorking: calculateHolidayAsWorking,
       );
 

@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../providers/providers.dart';
 import '../../data/models/attendance_log.dart';
 import '../../data/models/holiday.dart';
+import '../../data/models/attendance_rules.dart';
 import '../../logic/stats_calculator.dart';
 
 import '../settings/settings_screen.dart';
@@ -81,6 +82,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final globalConfig = ref.watch(globalConfigProvider).value ?? {};
     final userSelectedHolidaysAsync = ref.watch(userSelectedHolidaysProvider);
     final calculateAsWorking = ref.watch(calculateHolidayAsWorkingProvider);
+    final rules = ref.watch(attendanceRulesConfigProvider);
     final plannedDates = ref.watch(plannedDatesProvider).value ?? <DateTime>[];
 
     return Scaffold(
@@ -182,6 +184,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     attendanceLogs,
                     holidaysAsync.value ?? [],
                     calculateAsWorking,
+                    rules,
                     _focusedDay,
                   ),
                   const SizedBox(height: 24),
@@ -193,6 +196,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         year: currentYear,
                         logs: yearlyLogs.cast<AttendanceLog>(),
                         holidays: holidaysAsync.value ?? [],
+                        rules: rules,
                         calculateHolidayAsWorking: calculateAsWorking,
                       );
                       return _buildProgressCard(context, stats);
@@ -359,6 +363,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     List<DateTime> holidays,
     List<DateTime> plannedDates,
   ) {
+    final rules = ref.read(attendanceRulesConfigProvider);
+    final workingWeekdays = rules.workingWeekdays;
     return TableCalendar(
       key: ValueKey(
         _calendarFormat,
@@ -367,7 +373,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       lastDay: DateTime.utc(2030, 12, 31),
       focusedDay: _focusedDay,
       calendarFormat: _calendarFormat,
-      startingDayOfWeek: StartingDayOfWeek.sunday, // Set start day to Sunday
+      startingDayOfWeek: StartingDayOfWeek.values[rules.weekStartDay - 1],
+      weekendDays: [
+        for (int d = 1; d <= 7; d++)
+          if (!workingWeekdays.contains(d)) d,
+      ],
       daysOfWeekHeight: 32,
       availableCalendarFormats: const {CalendarFormat.month: 'Month'},
       availableGestures:
@@ -538,6 +548,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     List<AttendanceLog> logs,
     List<DateTime> holidays,
     bool calculateHolidayAsWorking,
+    AttendanceRulesConfig rules,
     DateTime displayDate,
   ) {
     // Current month range based on visible calendar month
@@ -549,6 +560,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       end: endOfMonth,
       logs: logs,
       holidays: holidays,
+      rules: rules,
       calculateHolidayAsWorking: calculateHolidayAsWorking,
     );
 
@@ -731,11 +743,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final endOfMonth = DateTime(displayDate.year, displayDate.month + 1, 0);
     final daysInMonth = endOfMonth.day;
 
-    // Only include weekdays (Mon-Fri) — skip weekends entirely.
+    // Only include configured working days — skip non-working days entirely.
+    final workingWeekdays = ref.read(attendanceRulesConfigProvider).workingWeekdays;
     Map<int, double> dailyHours = {};
     for (int i = 1; i <= daysInMonth; i++) {
       final weekday = DateTime(displayDate.year, displayDate.month, i).weekday;
-      if (weekday == DateTime.saturday || weekday == DateTime.sunday) continue;
+      if (!workingWeekdays.contains(weekday)) continue;
       dailyHours[i] = 0.0;
     }
 
@@ -918,10 +931,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final isSelectedToday = isSameDay(_selectedDay, today);
 
-    // Check if the selected day is a weekend
-    final isWeekend =
-        _selectedDay.weekday == DateTime.saturday ||
-        _selectedDay.weekday == DateTime.sunday;
+    // Check if the selected day is a non-working day
+    final isWeekend = !ref
+        .read(attendanceRulesConfigProvider)
+        .workingWeekdays
+        .contains(_selectedDay.weekday);
 
     // Check if the selected day is a holiday
     Holiday? holiday;
@@ -1062,10 +1076,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
-    // Check for Weekend (Bypassed if allowMockLocation is true)
+    // Check for non-working day (Bypassed if allowMockLocation is true)
     if (!allowMockLocation &&
-        (_selectedDay.weekday == DateTime.saturday ||
-            _selectedDay.weekday == DateTime.sunday)) {
+        !ref
+            .read(attendanceRulesConfigProvider)
+            .workingWeekdays
+            .contains(_selectedDay.weekday)) {
       return Container(
         width: double.infinity,
         height: 56,

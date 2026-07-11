@@ -12,6 +12,7 @@ import 'widgets/permissions_dialog.dart';
 import '../../services/background_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'personal_holidays_screen.dart';
+import 'attendance_rules_screen.dart';
 import '../shared/widgets/app_time_picker.dart';
 import '../../services/auto_checkin_service.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
@@ -316,6 +317,21 @@ class SettingsScreen extends ConsumerWidget {
                     },
                     activeThumbColor: Colors.orangeAccent,
                   ),
+                ),
+                _buildDivider(context),
+                _buildSettingsTile(
+                  context,
+                  icon: Icons.rule_rounded,
+                  iconColor: Colors.indigoAccent,
+                  title: 'Attendance Rules',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AttendanceRulesScreen(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

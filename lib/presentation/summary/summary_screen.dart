@@ -17,6 +17,7 @@ class SummaryScreen extends ConsumerWidget {
     final yearlyLogsAsync = ref.watch(yearlyAttendanceProvider(currentYear));
     final holidaysAsync = ref.watch(holidaysStreamProvider);
     final calculateAsWorking = ref.watch(calculateHolidayAsWorkingProvider);
+    final rules = ref.watch(attendanceRulesConfigProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(
@@ -122,6 +123,7 @@ class SummaryScreen extends ConsumerWidget {
                 year: currentYear,
                 logs: logs,
                 holidays: holidays,
+                rules: rules,
                 calculateHolidayAsWorking: calculateAsWorking,
               );
 

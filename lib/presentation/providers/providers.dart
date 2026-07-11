@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/attendance_service.dart';
 import '../../services/planned_days_service.dart';
 import '../../data/models/user_profile.dart'; // Add this import
+import '../../data/models/attendance_rules.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/notification_service.dart';
 import '../../services/admin_service.dart'; // Add this import
@@ -69,6 +71,7 @@ class AutoCheckInEnabledNotifier extends Notifier<bool> {
           'notification_minute': ref.read(notificationTimeProvider).minute,
           'geofence_radius': ref.read(geofenceRadiusProvider),
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
     });
@@ -106,6 +109,7 @@ class GeofenceRadiusNotifier extends Notifier<int> {
           'notification_hour': ref.read(notificationTimeProvider).hour,
           'notification_minute': ref.read(notificationTimeProvider).minute,
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
     });
@@ -229,6 +233,7 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
     });
@@ -274,6 +279,7 @@ class NotificationEnabledNotifier extends Notifier<bool> {
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
     });
@@ -321,6 +327,7 @@ class NotificationTimeNotifier extends Notifier<TimeOfDay> {
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
     });
@@ -358,6 +365,53 @@ class CalculateHolidayAsWorkingNotifier extends Notifier<bool> {
           'notification_minute': ref.read(notificationTimeProvider).minute,
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
+          'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
+        });
+      }
+    });
+  }
+}
+
+final attendanceRulesConfigProvider =
+    NotifierProvider<AttendanceRulesConfigNotifier, AttendanceRulesConfig>(
+      AttendanceRulesConfigNotifier.new,
+    );
+
+class AttendanceRulesConfigNotifier extends Notifier<AttendanceRulesConfig> {
+  Timer? _debounce;
+
+  @override
+  AttendanceRulesConfig build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    final jsonStr = prefs.getString('attendance_rules_config');
+    if (jsonStr == null) return AttendanceRulesConfig.defaultConfig;
+    try {
+      return AttendanceRulesConfig.fromMap(
+        jsonDecode(jsonStr) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      return AttendanceRulesConfig.defaultConfig;
+    }
+  }
+
+  Future<void> update(AttendanceRulesConfig config) async {
+    state = config;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setString('attendance_rules_config', jsonEncode(config.toMap()));
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 2), () async {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        await ref.read(authServiceProvider).updateUserSettings(user.uid, {
+          'attendanceRulesConfig': config.toMap(),
+          'theme_mode': ref.read(themeModeProvider).index,
+          'notifications_enabled': ref.read(notificationEnabledProvider),
+          'notification_hour': ref.read(notificationTimeProvider).hour,
+          'notification_minute': ref.read(notificationTimeProvider).minute,
+          'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
+          'geofence_radius': ref.read(geofenceRadiusProvider),
+          'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
         });
       }
     });
@@ -389,6 +443,7 @@ Future<void> refreshSmartNotifications(
   final time = targetTime ?? ref.read(notificationTimeProvider);
   final holidays = ref.read(holidaysStreamProvider).value ?? <DateTime>[];
   final calculateHolidayAsWorking = ref.read(calculateHolidayAsWorkingProvider);
+  final workingWeekdays = ref.read(attendanceRulesConfigProvider).workingWeekdays;
 
   final currentYear = DateTime.now().year;
   final logsAsync = ref.read(yearlyAttendanceProvider(currentYear));
@@ -411,6 +466,7 @@ Future<void> refreshSmartNotifications(
     holidays: holidays,
     loggedDates: loggedDatesSet.toList(),
     calculateHolidayAsWorking: calculateHolidayAsWorking,
+    workingWeekdays: workingWeekdays,
   );
 }
 
@@ -434,6 +490,10 @@ final notificationSchedulerProvider = Provider<void>((ref) {
   });
 
   ref.listen(calculateHolidayAsWorkingProvider, (previous, next) {
+    refreshSmartNotifications(ref);
+  });
+
+  ref.listen(attendanceRulesConfigProvider, (previous, next) {
     refreshSmartNotifications(ref);
   });
 });

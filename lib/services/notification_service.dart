@@ -80,6 +80,7 @@ class NotificationService {
     required List<DateTime> holidays,
     required List<DateTime> loggedDates,
     bool calculateHolidayAsWorking = false,
+    Set<int> workingWeekdays = const {1, 2, 3, 4, 5},
   }) async {
     await cancelAllNotifications();
 
@@ -111,9 +112,8 @@ class NotificationService {
         continue;
       }
 
-      // Check 1: Weekend
-      if (dateToEvaluate.weekday == DateTime.saturday ||
-          dateToEvaluate.weekday == DateTime.sunday) {
+      // Check 1: Not a configured working day
+      if (!workingWeekdays.contains(dateToEvaluate.weekday)) {
         daysOffset++;
         continue;
       }

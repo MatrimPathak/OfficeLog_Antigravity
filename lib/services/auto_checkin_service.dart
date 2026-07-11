@@ -236,10 +236,11 @@ class AutoCheckInService {
         if (!isLoggedToday) {
           // 1. Workday-Only Check (Bypassed if allowMockLocation is true)
           if (!allowMockLocation) {
-            if (today.weekday == DateTime.saturday ||
-                today.weekday == DateTime.sunday) {
+            final workingWeekdays =
+                ref.read(attendanceRulesConfigProvider).workingWeekdays;
+            if (!workingWeekdays.contains(today.weekday)) {
               await _logBackgroundEvent(
-                'AutoCheckIn: Skipping Check-in - Weekend.',
+                'AutoCheckIn: Skipping Check-in - Not a configured working day.',
               );
               return;
             }
