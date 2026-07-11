@@ -81,6 +81,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final globalConfig = ref.watch(globalConfigProvider).value ?? {};
     final userSelectedHolidaysAsync = ref.watch(userSelectedHolidaysProvider);
     final calculateAsWorking = ref.watch(calculateHolidayAsWorkingProvider);
+    final plannedDates = ref.watch(plannedDatesProvider).value ?? <DateTime>[];
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -124,11 +125,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       child: Column(
                         children: [
                           holidaysAsync.when(
-                            data: (holidays) =>
-                                _buildCalendar(attendanceLogs, holidays),
-                            loading: () => _buildCalendar(attendanceLogs, []),
+                            data: (holidays) => _buildCalendar(
+                              attendanceLogs,
+                              holidays,
+                              plannedDates,
+                            ),
+                            loading: () =>
+                                _buildCalendar(attendanceLogs, [], plannedDates),
                             error: (_, __) =>
-                                _buildCalendar(attendanceLogs, []),
+                                _buildCalendar(attendanceLogs, [], plannedDates),
                           ),
                           const SizedBox(height: 16),
                           Divider(color: Theme.of(context).dividerColor),
@@ -146,6 +151,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 context,
                                 'ATTENDED',
                                 Colors.greenAccent,
+                              ),
+                              _buildLegendItem(
+                                context,
+                                'PLANNED',
+                                Colors.blueAccent,
                               ),
                             ],
                           ),
@@ -238,20 +248,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             child: Row(
               children: [
-                if (user?.photoURL != null)
-                  CircleAvatar(
-                    backgroundImage: NetworkImage(user!.photoURL!),
-                    radius: 20,
-                  )
-                else
-                  CircleAvatar(
-                    backgroundColor: Theme.of(context).primaryColor,
-                    radius: 20,
-                    child: Text(
-                      user?.displayName?.substring(0, 1).toUpperCase() ?? 'U',
-                      style: TextStyle(color: Colors.white),
-                    ),
+                InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                    );
+                  },
+                  customBorder: const CircleBorder(),
+                  child: Tooltip(
+                    message: 'Settings',
+                    child: user?.photoURL != null
+                        ? CircleAvatar(
+                            backgroundImage: NetworkImage(user!.photoURL!),
+                            radius: 20,
+                          )
+                        : CircleAvatar(
+                            backgroundColor: Theme.of(context).primaryColor,
+                            radius: 20,
+                            child: Text(
+                              user?.displayName?.substring(0, 1).toUpperCase() ??
+                                  'U',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
                   ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -307,28 +329,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             tooltip: 'Planning Mode',
           ),
         ),
-        const SizedBox(width: 12),
-        Container(
-          height: 64,
-          width: 64,
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Theme.of(context).dividerColor),
-          ),
-          child: IconButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-            },
-            icon: Icon(
-              Icons.settings,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -354,7 +354,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildCalendar(List<AttendanceLog> logs, List<DateTime> holidays) {
+  Widget _buildCalendar(
+    List<AttendanceLog> logs,
+    List<DateTime> holidays,
+    List<DateTime> plannedDates,
+  ) {
     return TableCalendar(
       key: ValueKey(
         _calendarFormat,
@@ -431,11 +435,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       eventLoader: (day) {
         final dayLogs = logs.where((log) => isSameDay(log.date, day)).toList();
         final isHoliday = holidays.any((h) => isSameDay(h, day));
-        if (isHoliday) {
-          // Use a special string or object to represent holiday
-          return [...dayLogs, 'HOLIDAY_EVENT'];
-        }
-        return dayLogs;
+        final isPlanned = plannedDates.any((d) => isSameDay(d, day));
+        final events = <dynamic>[...dayLogs];
+        if (isHoliday) events.add('HOLIDAY_EVENT');
+        if (isPlanned && dayLogs.isEmpty) events.add('PLANNED_EVENT');
+        return events;
       },
       calendarBuilders: CalendarBuilders(
         selectedBuilder: (context, day, focusedDay) {
@@ -478,6 +482,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
           final hasAttendance = events.any((e) => e is AttendanceLog);
           final hasHoliday = events.contains('HOLIDAY_EVENT');
+          final hasPlanned = events.contains('PLANNED_EVENT');
 
           return Positioned(
             bottom: 6,
@@ -509,6 +514,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           spreadRadius: 1,
                         ),
                       ],
+                    ),
+                  ),
+                if (hasPlanned)
+                  Container(
+                    width: 5,
+                    height: 5,
+                    margin: const EdgeInsets.symmetric(horizontal: 1),
+                    decoration: const BoxDecoration(
+                      color: Colors.blueAccent,
+                      shape: BoxShape.circle,
                     ),
                   ),
               ],
@@ -716,14 +731,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final endOfMonth = DateTime(displayDate.year, displayDate.month + 1, 0);
     final daysInMonth = endOfMonth.day;
 
+    // Only include weekdays (Mon-Fri) — skip weekends entirely.
     Map<int, double> dailyHours = {};
     for (int i = 1; i <= daysInMonth; i++) {
+      final weekday = DateTime(displayDate.year, displayDate.month, i).weekday;
+      if (weekday == DateTime.saturday || weekday == DateTime.sunday) continue;
       dailyHours[i] = 0.0;
     }
 
     for (var log in logs) {
       if (log.date.year == displayDate.year &&
-          log.date.month == displayDate.month) {
+          log.date.month == displayDate.month &&
+          dailyHours.containsKey(log.date.day)) {
         double totalHours = 0;
         for (var session in log.sessions) {
           if (session.outTime != null) {
@@ -739,6 +758,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     for (var val in dailyHours.values) {
       if (val > maxY) maxY = val.ceilToDouble();
     }
+
+    // Map day-of-month -> a consecutive x-position so weekend gaps collapse.
+    final sortedDays = dailyHours.keys.toList()..sort();
+    final dayToIndex = {
+      for (var i = 0; i < sortedDays.length; i++) sortedDays[i]: i + 1,
+    };
+    final indexToDay = {
+      for (final entry in dayToIndex.entries) entry.value: entry.key,
+    };
 
     return Container(
       height: 200,
@@ -794,7 +822,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: daysInMonth * 20.0, // Reduced width to bring bars closer
+                width:
+                    sortedDays.length * 20.0, // Reduced width to bring bars closer
                 child: BarChart(
                   BarChartData(
                     barTouchData: BarTouchData(
@@ -831,12 +860,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           showTitles: true,
                           interval: 1,
                           getTitlesWidget: (value, meta) {
-                            final intVal = value.toInt();
-                            if (intVal > 0 && intVal <= daysInMonth) {
+                            final day = indexToDay[value.toInt()];
+                            if (day != null) {
                               return Padding(
                                 padding: const EdgeInsets.only(top: 8.0),
                                 child: Text(
-                                  intVal.toString(),
+                                  day.toString(),
                                   style: const TextStyle(
                                     color: Colors.grey,
                                     fontSize: 10,
@@ -850,12 +879,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                     borderData: FlBorderData(show: false),
-                    barGroups: dailyHours.entries.map((e) {
+                    barGroups: sortedDays.map((day) {
                       return BarChartGroupData(
-                        x: e.key,
+                        x: dayToIndex[day]!,
                         barRods: [
                           BarChartRodData(
-                            toY: e.value,
+                            toY: dailyHours[day]!,
                             color: AppTheme.primaryColor,
                             width: 10,
                             borderRadius: BorderRadius.circular(2),

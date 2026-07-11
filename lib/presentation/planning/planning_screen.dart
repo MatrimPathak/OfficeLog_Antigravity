@@ -7,6 +7,7 @@ import '../../data/models/attendance_log.dart';
 import '../../logic/stats_calculator.dart';
 import '../providers/providers.dart';
 import '../../services/admin_service.dart';
+import 'widgets/clear_planned_days_dialog.dart';
 
 class PlanningScreen extends ConsumerStatefulWidget {
   const PlanningScreen({super.key});
@@ -23,7 +24,8 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    final plannedDates = ref.watch(plannedDatesProvider);
+    final plannedDatesAsync = ref.watch(plannedDatesProvider);
+    final plannedDates = plannedDatesAsync.value ?? <DateTime>[];
     final yearlyLogsAsync = ref.watch(yearlyAttendanceProvider(now.year));
     final holidaysAsync = ref.watch(holidaysStreamProvider);
     final calculateAsWorking = ref.watch(calculateHolidayAsWorkingProvider);
@@ -56,28 +58,10 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
               onPressed: () async {
                 final confirm = await showDialog<bool>(
                   context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Clear All Plans'),
-                    content: const Text(
-                      'Remove all planned office days?',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text(
-                          'Clear',
-                          style: TextStyle(color: Colors.redAccent),
-                        ),
-                      ),
-                    ],
-                  ),
+                  builder: (ctx) => const ClearPlannedDaysDialog(),
                 );
                 if (confirm == true) {
-                  await ref.read(plannedDatesProvider.notifier).clear();
+                  await ref.read(plannedDaysServiceProvider)?.clear();
                 }
               },
               child: const Text(
@@ -99,7 +83,7 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
             calculateHolidayAsWorking: calculateAsWorking,
           );
 
-          final validPlannedDays = plannedDates
+          final validPlannedDatesList = plannedDates
               .where(
                 (d) =>
                     d.year == now.year &&
@@ -113,7 +97,8 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
                           h.day == d.day,
                     ),
               )
-              .length;
+              .toList();
+          final validPlannedDays = validPlannedDatesList.length;
 
           final confirmedDays = yearlyStats.ytdPresent;
           final projectedTotal = confirmedDays + validPlannedDays;
@@ -134,6 +119,12 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
                   totalRequired: totalRequired,
                   netBalance: netBalance,
                   leaveBuffer: leaveBuffer,
+                ),
+                const SizedBox(height: 16),
+                _buildCurrentMonthCard(
+                  context,
+                  yearlyStats,
+                  validPlannedDatesList,
                 ),
                 const SizedBox(height: 16),
                 _buildLegend(context),
@@ -212,9 +203,7 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
                               h.day == selectedDay.day,
                         );
                         if (isHoliday) return;
-                        ref
-                            .read(plannedDatesProvider.notifier)
-                            .toggle(selectedDay);
+                        ref.read(plannedDaysServiceProvider)?.toggle(selectedDay);
                         setState(() => _focusedDay = focusedDay);
                       },
                       calendarBuilders: CalendarBuilders(
@@ -440,6 +429,128 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
                   ),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentMonthCard(
+    BuildContext context,
+    YearlyStatsResult yearlyStats,
+    List<DateTime> validPlannedDates,
+  ) {
+    MonthlyStats? monthStats;
+    try {
+      monthStats = yearlyStats.monthlyBreakdown.firstWhere(
+        (m) => m.month == _focusedDay.month,
+      );
+    } catch (_) {}
+
+    if (monthStats == null) return const SizedBox.shrink();
+
+    // Cumulative shortfall from Jan through the viewed month: required days
+    // minus (attended days + planned days) across that whole span. Planning
+    // a day anywhere up to the viewed month pays down this number.
+    int requiredToDate = 0;
+    int presentToDate = 0;
+    for (final m in yearlyStats.monthlyBreakdown) {
+      if (m.month <= _focusedDay.month) {
+        requiredToDate += m.requiredDays;
+        presentToDate += m.presentDays;
+      }
+    }
+    final plannedToDate = validPlannedDates
+        .where((d) => d.month <= _focusedDay.month)
+        .length;
+
+    final ytdDeficit = requiredToDate - (presentToDate + plannedToDate);
+    final isDeficit = ytdDeficit > 0;
+    final deficitColor = isDeficit ? AppTheme.dangerColor : Colors.greenAccent;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'THIS MONTH (${monthStats.monthName.toUpperCase()})',
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 10,
+                letterSpacing: 1.0,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Attendance',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(height: 4),
+                    RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '${monthStats.presentDays}',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                          TextSpan(
+                            text: ' / ${monthStats.requiredDays} required',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Shortfall (YTD)',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isDeficit
+                          ? '$ytdDeficit day${ytdDeficit == 1 ? '' : 's'}'
+                          : 'None',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: deficitColor,
+                      ),
+                    ),
+                    if (plannedToDate > 0) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '$plannedToDate planned applied',
+                        style: const TextStyle(
+                          color: Colors.blueAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ),
           ],
         ),

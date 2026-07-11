@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/auth_service.dart';
 import '../../services/attendance_service.dart';
+import '../../services/planned_days_service.dart';
 import '../../data/models/user_profile.dart'; // Add this import
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/notification_service.dart';
@@ -437,61 +438,19 @@ final notificationSchedulerProvider = Provider<void>((ref) {
   });
 });
 
-// Planned office days for leave planning
-final plannedDatesProvider =
-    NotifierProvider<PlannedDatesNotifier, List<DateTime>>(
-      PlannedDatesNotifier.new,
-    );
-
-class PlannedDatesNotifier extends Notifier<List<DateTime>> {
-  static const _prefsKey = 'planned_office_days';
-  Future<void> _writeQueue = Future.value();
-
-  @override
-  List<DateTime> build() {
-    final prefs = ref.watch(sharedPreferencesProvider);
-    final raw = prefs.getStringList(_prefsKey) ?? [];
-    return raw.map((s) => DateTime.tryParse(s)).whereType<DateTime>().toList();
+// Planned office days for leave planning (stored in Firestore: users/{uid}/planned)
+final plannedDaysServiceProvider = Provider<PlannedDaysService?>((ref) {
+  final user = ref.watch(currentUserProvider);
+  if (user != null) {
+    return PlannedDaysService(user.uid);
   }
+  return null;
+});
 
-  Future<void> _persistDates(List<DateTime> dates) {
-    final prefs = ref.read(sharedPreferencesProvider);
-    final payload = dates.map((d) => d.toIso8601String()).toList();
-    _writeQueue = _writeQueue
-        .then((_) => prefs.setStringList(_prefsKey, payload))
-        .catchError((_) {});
-    return _writeQueue;
+final plannedDatesProvider = StreamProvider<List<DateTime>>((ref) {
+  final service = ref.watch(plannedDaysServiceProvider);
+  if (service != null) {
+    return service.getPlannedDatesStream();
   }
-
-  Future<void> toggle(DateTime date) async {
-    final normalized = DateTime(date.year, date.month, date.day);
-    final current = List<DateTime>.from(state);
-    final exists = current.any(
-      (d) =>
-          d.year == normalized.year &&
-          d.month == normalized.month &&
-          d.day == normalized.day,
-    );
-    if (exists) {
-      current.removeWhere(
-        (d) =>
-            d.year == normalized.year &&
-            d.month == normalized.month &&
-            d.day == normalized.day,
-      );
-    } else {
-      current.add(normalized);
-    }
-    state = current;
-    await _persistDates(current);
-  }
-
-  Future<void> clear() async {
-    state = [];
-    final prefs = ref.read(sharedPreferencesProvider);
-    _writeQueue = _writeQueue
-        .then((_) => prefs.remove(_prefsKey))
-        .catchError((_) {});
-    await _writeQueue;
-  }
-}
+  return Stream.value([]);
+});
