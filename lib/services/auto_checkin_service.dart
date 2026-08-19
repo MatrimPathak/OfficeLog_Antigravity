@@ -216,6 +216,7 @@ class AutoCheckInService {
       final radius = ref.read(geofenceRadiusProvider).toDouble();
       final checkInThreshold = radius;
       final checkOutThreshold = radius;
+      final captureTimes = ref.read(captureCheckInOutProvider);
 
       await _logBackgroundEvent(
         'AutoCheckIn: Distance is ${distance.toInt()}m',
@@ -260,7 +261,12 @@ class AutoCheckInService {
             date: today,
             timestamp: today,
             method: 'auto',
-            sessions: [AttendanceSession(inTime: today)],
+            sessions: [
+              AttendanceSession(
+                inTime: today,
+                outTime: captureTimes ? null : today,
+              ),
+            ],
           );
           await attendanceService.logAttendance(log);
           await refreshSmartNotifications(ref);
@@ -271,8 +277,10 @@ class AutoCheckInService {
           await _logBackgroundEvent(
             'AutoCheckIn: SUCCESS - Checked in via background.',
           );
-        } else {
+        } else if (captureTimes) {
           // If already logged today, check if they were checked-out previously and returned.
+          // Only relevant when times are being captured, since without them the
+          // day is marked complete on the very first check-in.
           final todayLogs = logs
               .where((log) => StatsCalculator.isSameDay(log.date, today))
               .toList();
@@ -308,7 +316,9 @@ class AutoCheckInService {
       } else if (distance > checkOutThreshold) {
         // --- ATTEMPT CHECK-OUT ---
         // We ALWAYS allow check-outs if distance > 200m and user is logged in, regardless of time.
-        if (isLoggedToday) {
+        // Skipped entirely when times aren't captured, since the day is already
+        // marked complete at check-in.
+        if (captureTimes && isLoggedToday) {
           await checkAndLogOutAttendance();
         }
       }

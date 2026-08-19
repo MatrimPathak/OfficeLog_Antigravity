@@ -71,6 +71,7 @@ class AutoCheckInEnabledNotifier extends Notifier<bool> {
           'notification_minute': ref.read(notificationTimeProvider).minute,
           'geofence_radius': ref.read(geofenceRadiusProvider),
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'captureCheckInOut': ref.read(captureCheckInOutProvider),
           'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
@@ -109,6 +110,7 @@ class GeofenceRadiusNotifier extends Notifier<int> {
           'notification_hour': ref.read(notificationTimeProvider).hour,
           'notification_minute': ref.read(notificationTimeProvider).minute,
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'captureCheckInOut': ref.read(captureCheckInOutProvider),
           'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
@@ -233,6 +235,7 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'captureCheckInOut': ref.read(captureCheckInOutProvider),
           'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
@@ -279,6 +282,7 @@ class NotificationEnabledNotifier extends Notifier<bool> {
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'captureCheckInOut': ref.read(captureCheckInOutProvider),
           'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
@@ -327,6 +331,7 @@ class NotificationTimeNotifier extends Notifier<TimeOfDay> {
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'captureCheckInOut': ref.read(captureCheckInOutProvider),
           'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
@@ -365,6 +370,46 @@ class CalculateHolidayAsWorkingNotifier extends Notifier<bool> {
           'notification_minute': ref.read(notificationTimeProvider).minute,
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
+          'captureCheckInOut': ref.read(captureCheckInOutProvider),
+          'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
+        });
+      }
+    });
+  }
+}
+
+final captureCheckInOutProvider =
+    NotifierProvider<CaptureCheckInOutNotifier, bool>(
+      CaptureCheckInOutNotifier.new,
+    );
+
+class CaptureCheckInOutNotifier extends Notifier<bool> {
+  Timer? _debounce;
+
+  @override
+  bool build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    return prefs.getBool('captureCheckInOut') ?? true;
+  }
+
+  Future<void> toggle(bool value) async {
+    state = value;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool('captureCheckInOut', value);
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 2), () async {
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        await ref.read(authServiceProvider).updateUserSettings(user.uid, {
+          'captureCheckInOut': value,
+          'theme_mode': ref.read(themeModeProvider).index,
+          'notifications_enabled': ref.read(notificationEnabledProvider),
+          'notification_hour': ref.read(notificationTimeProvider).hour,
+          'notification_minute': ref.read(notificationTimeProvider).minute,
+          'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
+          'geofence_radius': ref.read(geofenceRadiusProvider),
+          'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
           'attendanceRulesConfig': ref.read(attendanceRulesConfigProvider).toMap(),
         });
       }
@@ -412,6 +457,7 @@ class AttendanceRulesConfigNotifier extends Notifier<AttendanceRulesConfig> {
           'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
           'geofence_radius': ref.read(geofenceRadiusProvider),
           'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+          'captureCheckInOut': ref.read(captureCheckInOutProvider),
         });
       }
     });
