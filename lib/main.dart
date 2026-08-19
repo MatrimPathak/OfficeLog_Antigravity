@@ -58,6 +58,18 @@ class MyApp extends ConsumerWidget {
           return Consumer(
             builder: (context, ref, child) {
               final userProfileAsync = ref.watch(userProfileProvider);
+
+              // One-time settings hydration: restores toggles from the
+              // remote profile on a fresh install/device where local
+              // SharedPreferences are empty. No-ops on every later profile
+              // update once hydration has already run.
+              ref.listen(userProfileProvider, (previous, next) {
+                final profile = next.value;
+                if (profile != null) {
+                  hydrateSettingsFromRemote(ref, profile.settings);
+                }
+              });
+
               return userProfileAsync.when(
                 data: (profile) {
                   if (profile == null) {

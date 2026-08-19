@@ -77,6 +77,14 @@ class AutoCheckInEnabledNotifier extends Notifier<bool> {
       }
     });
   }
+
+  /// Applies a value restored from the remote profile, without re-publishing
+  /// it back to Firestore. Used to seed local state on a fresh install/device.
+  Future<void> hydrate(bool value) async {
+    state = value;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool('auto_checkin_enabled', value);
+  }
 }
 
 final geofenceRadiusProvider = NotifierProvider<GeofenceRadiusNotifier, int>(
@@ -115,6 +123,14 @@ class GeofenceRadiusNotifier extends Notifier<int> {
         });
       }
     });
+  }
+
+  /// Applies a value restored from the remote profile, without re-publishing
+  /// it back to Firestore. Used to seed local state on a fresh install/device.
+  Future<void> hydrate(int value) async {
+    state = value;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setInt('geofence_radius', value);
   }
 }
 
@@ -241,6 +257,14 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
       }
     });
   }
+
+  /// Applies a value restored from the remote profile, without re-publishing
+  /// it back to Firestore. Used to seed local state on a fresh install/device.
+  Future<void> hydrate(ThemeMode mode) async {
+    state = mode;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setInt('theme_mode', mode.index);
+  }
 }
 
 final notificationEnabledProvider =
@@ -287,6 +311,15 @@ class NotificationEnabledNotifier extends Notifier<bool> {
         });
       }
     });
+  }
+
+  /// Applies a value restored from the remote profile, without re-publishing
+  /// it back to Firestore or requesting permissions/scheduling notifications.
+  /// Used to seed local state on a fresh install/device.
+  Future<void> hydrate(bool value) async {
+    state = value;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool('notifications_enabled', value);
   }
 }
 
@@ -337,6 +370,16 @@ class NotificationTimeNotifier extends Notifier<TimeOfDay> {
       }
     });
   }
+
+  /// Applies a value restored from the remote profile, without re-publishing
+  /// it back to Firestore or rescheduling notifications. Used to seed local
+  /// state on a fresh install/device.
+  Future<void> hydrate(TimeOfDay time) async {
+    state = time;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setInt('notification_hour', time.hour);
+    await prefs.setInt('notification_minute', time.minute);
+  }
 }
 
 final calculateHolidayAsWorkingProvider =
@@ -376,6 +419,14 @@ class CalculateHolidayAsWorkingNotifier extends Notifier<bool> {
       }
     });
   }
+
+  /// Applies a value restored from the remote profile, without re-publishing
+  /// it back to Firestore. Used to seed local state on a fresh install/device.
+  Future<void> hydrate(bool value) async {
+    state = value;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool('calculateHolidayAsWorking', value);
+  }
 }
 
 final captureCheckInOutProvider =
@@ -414,6 +465,14 @@ class CaptureCheckInOutNotifier extends Notifier<bool> {
         });
       }
     });
+  }
+
+  /// Applies a value restored from the remote profile, without re-publishing
+  /// it back to Firestore. Used to seed local state on a fresh install/device.
+  Future<void> hydrate(bool value) async {
+    state = value;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool('captureCheckInOut', value);
   }
 }
 
@@ -461,6 +520,14 @@ class AttendanceRulesConfigNotifier extends Notifier<AttendanceRulesConfig> {
         });
       }
     });
+  }
+
+  /// Applies a value restored from the remote profile, without re-publishing
+  /// it back to Firestore. Used to seed local state on a fresh install/device.
+  Future<void> hydrate(AttendanceRulesConfig config) async {
+    state = config;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setString('attendance_rules_config', jsonEncode(config.toMap()));
   }
 }
 
@@ -560,3 +627,82 @@ final plannedDatesProvider = StreamProvider<List<DateTime>>((ref) {
   }
   return Stream.value([]);
 });
+
+const _settingsHydratedKey = 'settings_hydrated_from_remote';
+
+/// Seeds local settings from the remote profile's `settings` map the first
+/// time this device/install sees it (guarded by [_settingsHydratedKey]).
+///
+/// Every settings toggle in this app is local-first: it updates in-memory
+/// state and SharedPreferences immediately, then debounces a full snapshot
+/// up to Firestore. Nothing previously read that snapshot back, so a value
+/// set on one device (or before local data was cleared) was invisible on a
+/// fresh install, which silently reset every toggle to its default. This
+/// runs once per install to restore the last-synced values, after which
+/// local state is authoritative again for the rest of that install's
+/// lifetime, same as before.
+Future<void> hydrateSettingsFromRemote(
+  dynamic ref,
+  Map<String, dynamic> settings,
+) async {
+  final prefs = ref.read(sharedPreferencesProvider) as SharedPreferences;
+  if (prefs.getBool(_settingsHydratedKey) ?? false) return;
+
+  final themeIndex = settings['theme_mode'];
+  if (themeIndex is int && themeIndex >= 0 && themeIndex < ThemeMode.values.length) {
+    await ref.read(themeModeProvider.notifier).hydrate(ThemeMode.values[themeIndex]);
+  }
+
+  final notificationsEnabled = settings['notifications_enabled'];
+  if (notificationsEnabled is bool) {
+    await ref.read(notificationEnabledProvider.notifier).hydrate(notificationsEnabled);
+  }
+
+  final notificationHour = settings['notification_hour'];
+  final notificationMinute = settings['notification_minute'];
+  if (notificationHour is int || notificationMinute is int) {
+    final current = ref.read(notificationTimeProvider) as TimeOfDay;
+    await ref.read(notificationTimeProvider.notifier).hydrate(
+          TimeOfDay(
+            hour: notificationHour is int ? notificationHour : current.hour,
+            minute: notificationMinute is int ? notificationMinute : current.minute,
+          ),
+        );
+  }
+
+  final autoCheckInEnabled = settings['auto_checkin_enabled'];
+  if (autoCheckInEnabled is bool) {
+    await ref.read(autoCheckInEnabledProvider.notifier).hydrate(autoCheckInEnabled);
+  }
+
+  final geofenceRadius = settings['geofence_radius'];
+  if (geofenceRadius is int) {
+    await ref.read(geofenceRadiusProvider.notifier).hydrate(geofenceRadius);
+  }
+
+  final calculateHolidayAsWorking = settings['calculateHolidayAsWorking'];
+  if (calculateHolidayAsWorking is bool) {
+    await ref
+        .read(calculateHolidayAsWorkingProvider.notifier)
+        .hydrate(calculateHolidayAsWorking);
+  }
+
+  final captureCheckInOut = settings['captureCheckInOut'];
+  if (captureCheckInOut is bool) {
+    await ref.read(captureCheckInOutProvider.notifier).hydrate(captureCheckInOut);
+  }
+
+  final attendanceRulesConfig = settings['attendanceRulesConfig'];
+  if (attendanceRulesConfig is Map) {
+    try {
+      final config = AttendanceRulesConfig.fromMap(
+        Map<String, dynamic>.from(attendanceRulesConfig),
+      );
+      await ref.read(attendanceRulesConfigProvider.notifier).hydrate(config);
+    } catch (_) {
+      // Malformed remote config; keep local defaults.
+    }
+  }
+
+  await prefs.setBool(_settingsHydratedKey, true);
+}
