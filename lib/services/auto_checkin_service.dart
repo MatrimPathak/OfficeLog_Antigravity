@@ -332,6 +332,14 @@ class AutoCheckInService {
       await _logBackgroundEvent(
         'AutoCheckIn: checkAndLogOutAttendance triggered.',
       );
+
+      if (!ref.read(captureCheckInOutProvider)) {
+        await _logBackgroundEvent(
+          'AutoCheckOut: Skipped - times are not being captured.',
+        );
+        return;
+      }
+
       await _logBackgroundEvent('AutoCheckOut: Checking user state...');
       var user = ref.read(currentUserProvider);
 

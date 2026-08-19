@@ -1151,6 +1151,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isDayLogged = dayLogs.isNotEmpty;
     final todayLog = isDayLogged ? dayLogs.first : null;
     final needsCheckout =
+        captureCheckInOut &&
         isDayLogged &&
         todayLog!.sessions.isNotEmpty &&
         todayLog.sessions.last.outTime == null;
