@@ -84,6 +84,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final calculateAsWorking = ref.watch(calculateHolidayAsWorkingProvider);
     final rules = ref.watch(attendanceRulesConfigProvider);
     final plannedDates = ref.watch(plannedDatesProvider).value ?? <DateTime>[];
+    final captureCheckInOut = ref.watch(captureCheckInOutProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -165,9 +166,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  // Daily Details
-                  _buildDailyDetailsCard(attendanceLogs),
+                  if (captureCheckInOut) ...[
+                    const SizedBox(height: 24),
+                    // Daily Details
+                    _buildDailyDetailsCard(attendanceLogs),
+                  ],
                   const SizedBox(height: 24),
 
                   // Info Card (New Position)
@@ -186,6 +189,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     calculateAsWorking,
                     rules,
                     _focusedDay,
+                    captureCheckInOut,
                   ),
                   const SizedBox(height: 24),
 
@@ -228,7 +232,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
-            child: _buildLogButton(attendanceLogs, holidaysAsync, globalConfig),
+            child: _buildLogButton(
+              attendanceLogs,
+              holidaysAsync,
+              globalConfig,
+              captureCheckInOut,
+            ),
           );
         },
         loading: () => const SizedBox.shrink(),
@@ -550,6 +559,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     bool calculateHolidayAsWorking,
     AttendanceRulesConfig rules,
     DateTime displayDate,
+    bool captureCheckInOut,
   ) {
     // Current month range based on visible calendar month
     final startOfMonth = DateTime(displayDate.year, displayDate.month, 1);
@@ -651,48 +661,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                context,
-                'Total Hrs',
-                monthTotalHours > 0
-                    ? '${monthTotalHours.toStringAsFixed(1)}h'
-                    : '-',
-                Colors.blueAccent,
-                null,
-                unitLabel: 'Hours',
+        if (captureCheckInOut) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  context,
+                  'Total Hrs',
+                  monthTotalHours > 0
+                      ? '${monthTotalHours.toStringAsFixed(1)}h'
+                      : '-',
+                  Colors.blueAccent,
+                  null,
+                  unitLabel: 'Hours',
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                context,
-                'Avg/Day',
-                avgHoursPerDay > 0
-                    ? '${avgHoursPerDay.toStringAsFixed(1)}h'
-                    : '-',
-                Colors.blueAccent,
-                null,
-                unitLabel: 'Hrs/Day',
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  context,
+                  'Avg/Day',
+                  avgHoursPerDay > 0
+                      ? '${avgHoursPerDay.toStringAsFixed(1)}h'
+                      : '-',
+                  Colors.blueAccent,
+                  null,
+                  unitLabel: 'Hrs/Day',
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'MONTHLY TREND (HOURS)',
-          style: TextStyle(
-            color: Colors.grey,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
+            ],
           ),
-        ),
-        const SizedBox(height: 16),
-        _buildTrendChart(logs, displayDate),
+          const SizedBox(height: 24),
+          const Text(
+            'MONTHLY TREND (HOURS)',
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildTrendChart(logs, displayDate),
+        ],
       ],
     );
   }
@@ -1038,6 +1050,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     List<AttendanceLog> logs,
     AsyncValue<List<DateTime>> holidaysAsync,
     Map<String, dynamic> globalConfig,
+    bool captureCheckInOut,
   ) {
     final allowMockLocation = globalConfig['allowMockLocation'] ?? false;
 
@@ -1138,6 +1151,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isDayLogged = dayLogs.isNotEmpty;
     final todayLog = isDayLogged ? dayLogs.first : null;
     final needsCheckout =
+        captureCheckInOut &&
         isDayLogged &&
         todayLog!.sessions.isNotEmpty &&
         todayLog.sessions.last.outTime == null;
@@ -1172,7 +1186,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               borderRadius: BorderRadius.circular(16),
               onTap: () async {
                 if (!isDayLogged) {
-                  await _handleLogAttendance(logs, null, false);
+                  await _handleLogAttendance(
+                    logs,
+                    null,
+                    false,
+                    captureCheckInOut,
+                  );
                 } else if (needsCheckout) {
                   await _handleCheckOut(todayLog);
                 }
@@ -1326,28 +1345,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     List<AttendanceLog> logs,
     AttendanceLog? existingLog,
     bool isEditing,
+    bool captureCheckInOut,
   ) async {
-    final initialTime = isSameDay(_selectedDay, DateTime.now())
-        ? TimeOfDay.now()
-        : const TimeOfDay(hour: 9, minute: 0);
+    DateTime logTime;
+    if (captureCheckInOut) {
+      final initialTime = isSameDay(_selectedDay, DateTime.now())
+          ? TimeOfDay.now()
+          : const TimeOfDay(hour: 9, minute: 0);
 
-    final TimeOfDay? pickedTime = await AppTimePicker.show(
-      context: context,
-      initialTime: initialTime,
-      title: isEditing && existingLog != null
-          ? 'Edit Check-In Time'
-          : 'Select Check-In Time',
-    );
+      final TimeOfDay? pickedTime = await AppTimePicker.show(
+        context: context,
+        initialTime: initialTime,
+        title: isEditing && existingLog != null
+            ? 'Edit Check-In Time'
+            : 'Select Check-In Time',
+      );
 
-    if (pickedTime == null) return;
+      if (pickedTime == null) return;
 
-    final logTime = DateTime(
-      _selectedDay.year,
-      _selectedDay.month,
-      _selectedDay.day,
-      pickedTime.hour,
-      pickedTime.minute,
-    );
+      logTime = DateTime(
+        _selectedDay.year,
+        _selectedDay.month,
+        _selectedDay.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    } else {
+      // Times aren't captured: mark the day present immediately, no prompt.
+      logTime = isSameDay(_selectedDay, DateTime.now())
+          ? DateTime.now()
+          : DateTime(_selectedDay.year, _selectedDay.month, _selectedDay.day);
+    }
 
     try {
       if (existingLog != null) {
@@ -1355,11 +1383,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         if (sessions.isNotEmpty) {
           sessions[0] = AttendanceSession(
             inTime: logTime,
-            outTime: sessions[0].outTime,
+            outTime: captureCheckInOut ? sessions[0].outTime : logTime,
           );
         } else {
           // If no sessions, we use the timestamp as a fallback for potential existing legacy data
-          sessions.add(AttendanceSession(inTime: logTime));
+          sessions.add(
+            AttendanceSession(
+              inTime: logTime,
+              outTime: captureCheckInOut ? null : logTime,
+            ),
+          );
         }
 
         final updatedLog = AttendanceLog(
@@ -1380,7 +1413,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           date: _selectedDay,
           timestamp: now,
           method: 'manual',
-          sessions: [AttendanceSession(inTime: logTime)],
+          sessions: [
+            AttendanceSession(
+              inTime: logTime,
+              outTime: captureCheckInOut ? null : logTime,
+            ),
+          ],
         );
         await ref.read(attendanceServiceProvider)?.logAttendance(log);
       }

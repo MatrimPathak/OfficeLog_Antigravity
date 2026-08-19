@@ -101,6 +101,8 @@ class _ConfigOnboardingScreenState
         'notification_minute': ref.read(notificationTimeProvider).minute,
         'auto_checkin_enabled': ref.read(autoCheckInEnabledProvider),
         'geofence_radius': ref.read(geofenceRadiusProvider),
+        'calculateHolidayAsWorking': ref.read(calculateHolidayAsWorkingProvider),
+        'captureCheckInOut': ref.read(captureCheckInOutProvider),
       };
 
       await ref
@@ -312,6 +314,21 @@ class _ConfigOnboardingScreenState
                                   .read(autoCheckInServiceProvider)
                                   .stopGeofence();
                             }
+                          },
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      _buildSettingsTile(
+                        icon: Icons.access_time_rounded,
+                        iconColor: Colors.cyanAccent.shade700,
+                        title: 'Capture Check-in/Check-out Times',
+                        trailing: Switch.adaptive(
+                          value: ref.watch(captureCheckInOutProvider),
+                          activeThumbColor: Colors.cyanAccent.shade700,
+                          onChanged: (val) {
+                            ref
+                                .read(captureCheckInOutProvider.notifier)
+                                .toggle(val);
                           },
                         ),
                       ),

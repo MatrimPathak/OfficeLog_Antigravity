@@ -18,6 +18,7 @@ class SummaryScreen extends ConsumerWidget {
     final holidaysAsync = ref.watch(holidaysStreamProvider);
     final calculateAsWorking = ref.watch(calculateHolidayAsWorkingProvider);
     final rules = ref.watch(attendanceRulesConfigProvider);
+    final captureCheckInOut = ref.watch(captureCheckInOutProvider);
 
     return Scaffold(
       backgroundColor: Theme.of(
@@ -142,7 +143,12 @@ class SummaryScreen extends ConsumerWidget {
                     children: [
                       if (currentYear == DateTime.now().year) ...[
                         // Current Month Card
-                        _buildCurrentMonthCard(context, stats, currentYear),
+                        _buildCurrentMonthCard(
+                          context,
+                          stats,
+                          currentYear,
+                          captureCheckInOut,
+                        ),
                         const SizedBox(height: 24),
                       ],
 
@@ -157,7 +163,7 @@ class SummaryScreen extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _buildHighlightsGrid(context, stats),
+                      _buildHighlightsGrid(context, stats, captureCheckInOut),
                       const SizedBox(height: 24),
 
                       // Quarterly Performance
@@ -195,23 +201,25 @@ class SummaryScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 24),
 
-                      // Monthly Average Hours Trend (Chart)
-                      const Text(
-                        'MONTHLY AVERAGE HOURS TREND',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.0,
+                      if (captureCheckInOut) ...[
+                        // Monthly Average Hours Trend (Chart)
+                        const Text(
+                          'MONTHLY AVERAGE HOURS TREND',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildAverageHoursChart(
-                        context,
-                        ref,
-                        stats.monthlyBreakdown,
-                      ),
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 12),
+                        _buildAverageHoursChart(
+                          context,
+                          ref,
+                          stats.monthlyBreakdown,
+                        ),
+                        const SizedBox(height: 24),
+                      ],
 
                       // Monthly Breakdown (List)
                       const Text(
@@ -228,6 +236,7 @@ class SummaryScreen extends ConsumerWidget {
                         context,
                         ref,
                         stats.monthlyBreakdown,
+                        captureCheckInOut,
                       ),
                       const SizedBox(height: 40),
                     ],
@@ -259,6 +268,7 @@ class SummaryScreen extends ConsumerWidget {
     BuildContext context,
     YearlyStatsResult stats,
     int currentYear,
+    bool captureCheckInOut,
   ) {
     // Find current month stats
     final now = DateTime.now();
@@ -363,20 +373,22 @@ class SummaryScreen extends ConsumerWidget {
                   '${currentMonthStats.requiredDays} Days',
                   Theme.of(context).colorScheme.onSurface,
                 ),
-                Container(
-                  width: 1,
-                  height: 30,
-                  color: Theme.of(context).dividerColor,
-                ),
-                _buildStatColumn(
-                  context,
-                  'Total Hrs',
-                  '${currentMonthStats.totalHours.toStringAsFixed(1)}h',
-                  Theme.of(context).colorScheme.onSurface,
-                ),
+                if (captureCheckInOut) ...[
+                  Container(
+                    width: 1,
+                    height: 30,
+                    color: Theme.of(context).dividerColor,
+                  ),
+                  _buildStatColumn(
+                    context,
+                    'Total Hrs',
+                    '${currentMonthStats.totalHours.toStringAsFixed(1)}h',
+                    Theme.of(context).colorScheme.onSurface,
+                  ),
+                ],
               ],
             ),
-            if (currentMonthStats.presentDays > 0) ...[
+            if (captureCheckInOut && currentMonthStats.presentDays > 0) ...[
               const SizedBox(height: 8),
               Text(
                 'avg ${currentMonthStats.avgHoursPerDay.toStringAsFixed(1)} h/day',
@@ -476,7 +488,11 @@ class SummaryScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHighlightsGrid(BuildContext context, YearlyStatsResult stats) {
+  Widget _buildHighlightsGrid(
+    BuildContext context,
+    YearlyStatsResult stats,
+    bool captureCheckInOut,
+  ) {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -509,18 +525,20 @@ class SummaryScreen extends ConsumerWidget {
           '${stats.overallAttendance.toStringAsFixed(0)}%',
           Theme.of(context).colorScheme.onSurface,
         ),
-        _buildHighlightCard(
-          context,
-          'YTD Hours',
-          '${stats.ytdTotalHours.toStringAsFixed(1)}h',
-          Theme.of(context).colorScheme.onSurface,
-        ),
-        _buildHighlightCard(
-          context,
-          'Avg Hrs/Day',
-          '${stats.ytdAvgHoursPerDay.toStringAsFixed(1)}h',
-          Theme.of(context).colorScheme.onSurface,
-        ),
+        if (captureCheckInOut) ...[
+          _buildHighlightCard(
+            context,
+            'YTD Hours',
+            '${stats.ytdTotalHours.toStringAsFixed(1)}h',
+            Theme.of(context).colorScheme.onSurface,
+          ),
+          _buildHighlightCard(
+            context,
+            'Avg Hrs/Day',
+            '${stats.ytdAvgHoursPerDay.toStringAsFixed(1)}h',
+            Theme.of(context).colorScheme.onSurface,
+          ),
+        ],
       ],
     );
   }
@@ -983,6 +1001,7 @@ class SummaryScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     List<MonthlyStats> data,
+    bool captureCheckInOut,
   ) {
     // Show in chronological order
     final listData = data;
@@ -1096,7 +1115,9 @@ class SummaryScreen extends ConsumerWidget {
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          if (!isFuture && item.totalHours > 0) ...[
+                          if (captureCheckInOut &&
+                              !isFuture &&
+                              item.totalHours > 0) ...[
                             const SizedBox(height: 2),
                             Text(
                               '${item.totalHours.toStringAsFixed(1)}h total',
@@ -1142,7 +1163,9 @@ class SummaryScreen extends ConsumerWidget {
                                 color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
-                            if (!isFuture && item.presentDays > 0) ...[
+                            if (captureCheckInOut &&
+                                !isFuture &&
+                                item.presentDays > 0) ...[
                               const SizedBox(height: 2),
                               Text(
                                 '${item.avgHoursPerDay.toStringAsFixed(1)}h/d',

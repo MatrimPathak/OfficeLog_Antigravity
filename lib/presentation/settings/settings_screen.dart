@@ -287,6 +287,28 @@ class SettingsScreen extends ConsumerWidget {
                     }
                   },
                 ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // USER SETTINGS
+            _buildSectionHeader('USER SETTINGS'),
+            _buildSettingsGroup(
+              context,
+              children: [
+                _buildSettingsTile(
+                  context,
+                  icon: Icons.access_time_rounded,
+                  iconColor: Colors.cyanAccent.shade700,
+                  title: 'Capture Check-in/Check-out Times',
+                  trailing: Switch.adaptive(
+                    value: ref.watch(captureCheckInOutProvider),
+                    onChanged: (val) {
+                      ref.read(captureCheckInOutProvider.notifier).toggle(val);
+                    },
+                    activeThumbColor: Colors.cyanAccent.shade700,
+                  ),
+                ),
                 _buildDivider(context),
                 _buildSettingsTile(
                   context,
