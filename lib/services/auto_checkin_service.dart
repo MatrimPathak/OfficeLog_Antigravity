@@ -384,6 +384,7 @@ class AutoCheckInService {
 
       // Update the active session's outTime
       bool newlyCheckedOut = false;
+      bool extendedCheckout = false;
       if (sessions.isNotEmpty && sessions.last.outTime == null) {
         sessions[sessions.length - 1] = AttendanceSession(
           inTime: sessions.last.inTime,
@@ -391,12 +392,23 @@ class AutoCheckInService {
         );
         newlyCheckedOut = true;
       } else if (sessions.isNotEmpty) {
-        // If they trigger an exit but their last session was already checked out (e.g. dwell triggers),
-        // we just update the outTime of the last session to extend it.
-        sessions[sessions.length - 1] = AttendanceSession(
-          inTime: sessions.last.inTime,
-          outTime: today,
-        );
+        // If they trigger an exit but their last session was already checked out
+        // (e.g. rapid dwell/exit geofence retriggers), extend the outTime only
+        // if it's within a short grace window. A later re-check - such as simply
+        // reopening the app - must not clobber the originally recorded time.
+        final existingOutTime = sessions.last.outTime!;
+        if (today.difference(existingOutTime) < const Duration(minutes: 5)) {
+          sessions[sessions.length - 1] = AttendanceSession(
+            inTime: sessions.last.inTime,
+            outTime: today,
+          );
+          extendedCheckout = true;
+        } else {
+          await _logBackgroundEvent(
+            'AutoCheckOut: Skipped - already checked out at $existingOutTime, not extending.',
+          );
+          return;
+        }
       }
 
       final updatedLog = AttendanceLog(
@@ -420,9 +432,9 @@ class AutoCheckInService {
         await _logBackgroundEvent(
           'AutoCheckOut: SUCCESS - New checkout session.',
         );
-      } else {
+      } else if (extendedCheckout) {
         await _logBackgroundEvent(
-          'AutoCheckOut: SUCCESS - Updated existing checkout time.',
+          'AutoCheckOut: SUCCESS - Extended existing checkout time.',
         );
       }
     } catch (e, stack) {
