@@ -40,6 +40,17 @@ final notificationPermissionProvider = FutureProvider<bool>((ref) async {
   return await Permission.notification.isGranted;
 });
 
+/// Optional — activity recognition is used by the automatic attendance
+/// detection engine as one of several evidence signals, never a required
+/// dependency (see docs/AUTO_ATTENDANCE_DESIGN.md section 4). Uses
+/// `permission_handler`'s own `Permission.activityRecognition`, which maps
+/// to Android's ACTIVITY_RECOGNITION runtime permission and iOS's motion
+/// permission, rather than depending on the activity-recognition plugin's
+/// own permission check here (keeping this provider plugin-agnostic).
+final activityRecognitionPermissionProvider = FutureProvider<bool>((ref) async {
+  return await Permission.activityRecognition.isGranted;
+});
+
 final autoCheckInEnabledProvider =
     NotifierProvider<AutoCheckInEnabledNotifier, bool>(
       AutoCheckInEnabledNotifier.new,
@@ -131,6 +142,35 @@ class GeofenceRadiusNotifier extends Notifier<int> {
     state = value;
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setInt('geofence_radius', value);
+  }
+}
+
+/// Optional workplace Wi-Fi network name (SSID) used by the automatic
+/// attendance detection engine's NetworkEvidence signal — see
+/// docs/AUTO_ATTENDANCE_DESIGN.md sections 4 and 10. Deliberately local-only
+/// (SharedPreferences, not synced to Firestore/`updateUserSettings`): it's a
+/// per-device convenience for an Android-only, already-optional signal, not
+/// a rule the rest of the app needs to reason about. An empty/null value
+/// simply means the engine never gets a positive network signal, which the
+/// confidence engine already treats as "unavailable" rather than negative.
+final workplaceWifiSsidProvider =
+    NotifierProvider<WorkplaceWifiSsidNotifier, String?>(
+      WorkplaceWifiSsidNotifier.new,
+    );
+
+class WorkplaceWifiSsidNotifier extends Notifier<String?> {
+  @override
+  String? build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    final value = prefs.getString('workplace_wifi_ssid');
+    return (value == null || value.isEmpty) ? null : value;
+  }
+
+  Future<void> update(String? ssid) async {
+    final trimmed = ssid?.trim();
+    state = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setString('workplace_wifi_ssid', state ?? '');
   }
 }
 

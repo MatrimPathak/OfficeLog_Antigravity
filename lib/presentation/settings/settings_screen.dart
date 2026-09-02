@@ -18,6 +18,7 @@ import '../../services/auto_checkin_service.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
 import 'edit_office_screen.dart';
 import '../shared/widgets/geofence_radius_dialog.dart';
+import '../shared/widgets/workplace_wifi_dialog.dart';
 
 final isDeletingAccountProvider =
     NotifierProvider<IsDeletingAccountNotifier, bool>(
@@ -450,6 +451,20 @@ class SettingsScreen extends ConsumerWidget {
                         )
                       : null,
                 ),
+                if (ref.watch(autoCheckInEnabledProvider)) ...[
+                  _buildDivider(context),
+                  _buildSettingsTile(
+                    context,
+                    icon: Icons.wifi,
+                    iconColor: AppTheme.warningColor,
+                    title: 'Workplace Wi-Fi',
+                    value: ref.watch(workplaceWifiSsidProvider) ?? 'Not set',
+                    onTap: () => showDialog(
+                      context: context,
+                      builder: (context) => const WorkplaceWifiDialog(),
+                    ),
+                  ),
+                ],
                 if (ref.watch(autoCheckInEnabledProvider)) ...[
                   _buildDivider(context),
                   _buildSettingsTile(

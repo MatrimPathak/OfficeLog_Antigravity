@@ -4,7 +4,7 @@ import 'dart:developer' as developer;
 
 enum LogLevel { info, warning, error }
 
-enum LogType { general, background, network, auth, system }
+enum LogType { general, background, network, auth, system, detection }
 
 class LogEntry {
   final DateTime timestamp;

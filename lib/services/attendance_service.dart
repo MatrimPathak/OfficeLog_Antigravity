@@ -227,6 +227,24 @@ class AttendanceService {
     }
   }
 
+  /// Recent logs from the local Hive cache only (no network round-trip) —
+  /// used by the automatic detection engine's low-weight HistoricalEvidence
+  /// tie-breaker (see docs/AUTO_ATTENDANCE_DESIGN.md section 4), which must
+  /// stay cheap enough to run inside a short-lived background isolate.
+  Future<List<AttendanceLog>> getRecentLogsFromCache({int days = 14}) async {
+    try {
+      final box = await Hive.openBox<Map>('attendance_logs');
+      final cutoff = DateTime.now().subtract(Duration(days: days));
+      final logs = box.values
+          .map((e) => AttendanceLog.fromMap(Map<String, dynamic>.from(e)))
+          .where((l) => l.date.isAfter(cutoff))
+          .toList();
+      return _deduplicateLogs(logs);
+    } catch (_) {
+      return [];
+    }
+  }
+
   Future<List<int>> getActiveYears() async {
     final currentYear = DateTime.now().year;
 

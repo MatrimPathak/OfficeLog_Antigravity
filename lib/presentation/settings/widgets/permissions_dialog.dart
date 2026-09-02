@@ -105,6 +105,7 @@ class _PermissionsList extends ConsumerWidget {
     final bgLocationStatus = ref.watch(backgroundLocationPermissionProvider);
     final notificationStatus = ref.watch(notificationPermissionProvider);
     final batteryStatus = ref.watch(batteryOptimizationProvider);
+    final activityStatus = ref.watch(activityRecognitionPermissionProvider);
 
     return Column(
       children: [
@@ -125,6 +126,17 @@ class _PermissionsList extends ConsumerWidget {
           icon: Icons.map_rounded,
           title: 'Location (Always)',
           status: bgLocationStatus.when(
+            data: (s) => s,
+            loading: () => true,
+            error: (_, __) => false,
+          ),
+          onTap: () => openAppSettings(),
+        ),
+        _buildDivider(context),
+        _PermissionTile(
+          icon: Icons.directions_walk_rounded,
+          title: 'Motion & Activity (optional)',
+          status: activityStatus.when(
             data: (s) => s,
             loading: () => true,
             error: (_, __) => false,
