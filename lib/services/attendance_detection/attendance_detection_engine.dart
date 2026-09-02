@@ -1,3 +1,4 @@
+import 'confirmation_scheduler.dart';
 import 'detection_config.dart';
 import 'detection_diagnostics.dart';
 import 'detection_models.dart';
@@ -6,6 +7,15 @@ import 'detection_state_machine.dart';
 import 'signal_sources/activity_signal_source.dart';
 import 'signal_sources/location_signal_source.dart';
 import 'signal_sources/network_signal_source.dart';
+
+/// Detection states with an episode still in progress — no decision has
+/// been reached yet, so without a further signal the episode would
+/// otherwise sit unresolved forever. See [AttendanceDetectionEngine._handle].
+const Set<AttendanceDetectionState> _inProgressStates = {
+  AttendanceDetectionState.nearWorkplace,
+  AttendanceDetectionState.possibleArrival,
+  AttendanceDetectionState.possibleDeparture,
+};
 
 /// Facade tying the pure state machine/confidence/timestamp logic to
 /// platform signal sources and persistence. This is the only class
@@ -27,6 +37,9 @@ class AttendanceDetectionEngine {
   final LocationSignalSource _locationSource;
   final ActivitySignalSource _activitySource;
   final NetworkSignalSource _networkSource;
+  final ConfirmationScheduler _confirmationScheduler;
+  final DetectionConfig _config;
+  final DateTime Function() _clock;
 
   AttendanceDetectionEngine({
     required ActivitySignalSource activitySource,
@@ -34,11 +47,17 @@ class AttendanceDetectionEngine {
     DetectionPersistence? persistence,
     DetectionConfig config = DetectionConfig.defaultConfig,
     LocationSignalSource? locationSource,
+    ConfirmationScheduler? confirmationScheduler,
+    DateTime Function()? clock,
   }) : _persistence = persistence ?? DetectionPersistence(),
        _stateMachine = DetectionStateMachine(config: config),
        _locationSource = locationSource ?? LocationSignalSource(),
        _activitySource = activitySource,
-       _networkSource = networkSource;
+       _networkSource = networkSource,
+       _confirmationScheduler =
+           confirmationScheduler ?? const WorkmanagerConfirmationScheduler(),
+       _config = config,
+       _clock = clock ?? DateTime.now;
 
   /// Feeds a native geofence [transition] into the engine. Returns a
   /// decision only when confidence just crossed the automatic-action
@@ -138,7 +157,7 @@ class AttendanceDetectionEngine {
     }
 
     final observation = DetectionObservation(
-      timestamp: DateTime.now(),
+      timestamp: _clock(),
       activity: activity,
       distanceMeters: location.distanceMeters,
       accuracyMeters: location.accuracyMeters,
@@ -165,6 +184,23 @@ class AttendanceDetectionEngine {
     if (result.decision != null) {
       DetectionDiagnostics.logDecision(result.decision!);
     }
+
+    // An in-progress episode needs a further signal to ever resolve — see
+    // docs/AUTO_ATTENDANCE_DESIGN.md section 6.2. Without this, an episode
+    // that never receives a second geofence event and is never checked by
+    // opening the app would sit unresolved forever. A resolved/idle state
+    // cancels any pending confirmation instead, so it doesn't keep firing
+    // uselessly after a decision already committed (or an episode was
+    // discarded as a pass-by).
+    if (_inProgressStates.contains(result.nextState.state)) {
+      final delay = result.nextState.state == AttendanceDetectionState.possibleDeparture
+          ? Duration(milliseconds: _config.softDwellDuration.inMilliseconds ~/ 2)
+          : _config.softDwellDuration;
+      await _confirmationScheduler.scheduleConfirmation(delay: delay);
+    } else {
+      await _confirmationScheduler.cancelConfirmation();
+    }
+
     return result.decision;
   }
 }

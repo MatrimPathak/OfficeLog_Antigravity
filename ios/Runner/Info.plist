@@ -114,6 +114,13 @@
 		<string>location</string>
 		<string>remote-notification</string>
 	</array>
+	<!-- Used by plugin: workmanager, for the detection engine's deferred
+	     "confirming sample" re-check (BGAppRefreshTask via BGTaskScheduler).
+	     See docs/AUTO_ATTENDANCE_DESIGN.md section 6.2. -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>officelog_attendance_confirmation</string>
+	</array>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>This app needs access to location when in the background to track attendance within the office geofence.</string>
 	<key>NSCameraUsageDescription</key>

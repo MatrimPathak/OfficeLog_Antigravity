@@ -564,6 +564,34 @@ void main() {
       expect(r2.nextState.episode.first.timestamp, nextDay.timestamp);
     });
 
+    test('day rollover also resets a committed AT_WORKPLACE state with a '
+        'missed EXIT (no episode/anchor to check staleness against)', () {
+      // Yesterday: checked in and committed to AT_WORKPLACE (episodeAnchor is
+      // cleared on commit — see DetectionStateMachine._evaluateArrival).
+      final yesterdayCommit = DetectionEngineState(
+        state: AttendanceDetectionState.atWorkplace,
+        episode: const [],
+        episodeAnchor: null,
+        nativeDwellSeen: false,
+        lastObservationTimestamp: baseTime,
+      );
+
+      // The expected EXIT never arrived (missed geofence callback). Today,
+      // a fresh inside sample arrives — this must start a new episode, not
+      // silently no-op inside a stale AT_WORKPLACE from yesterday.
+      final today = obs(
+        timestamp: baseTime.add(const Duration(days: 1)),
+        transition: GeofenceTransition.enter,
+        activity: DetectionActivity.walking,
+        distanceMeters: 60,
+      );
+      final r = machine.process(current: yesterdayCommit, observation: today, radiusMeters: radius);
+
+      expect(r.decision, isNull);
+      expect(r.nextState.state, AttendanceDetectionState.nearWorkplace);
+      expect(r.nextState.episode.length, 1);
+    });
+
     test('idempotency: replayed EXIT events after checkout never re-emit', () {
       var state = const DetectionEngineState(
         state: AttendanceDetectionState.awayFromWorkplace,

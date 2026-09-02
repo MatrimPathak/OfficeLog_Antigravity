@@ -12,11 +12,23 @@ class DetectionEngineState {
   final DateTime? episodeAnchor;
   final bool nativeDwellSeen;
 
+  /// Timestamp of the most recently processed observation, regardless of
+  /// what it did to [state] or [episode] — including a committed
+  /// AT_WORKPLACE/AWAY_FROM_WORKPLACE where [episodeAnchor] is null. Used
+  /// solely for day-rollover detection (see [DetectionStateMachine.process]);
+  /// a *committed* state has no episode/anchor to check staleness against,
+  /// so relying on [episodeAnchor] alone missed exactly that case — a
+  /// check-in that's never followed by an EXIT (e.g. a missed geofence
+  /// callback) would otherwise stay AT_WORKPLACE forever, silently blocking
+  /// next-day auto check-in.
+  final DateTime? lastObservationTimestamp;
+
   const DetectionEngineState({
     required this.state,
     required this.episode,
     required this.episodeAnchor,
     required this.nativeDwellSeen,
+    this.lastObservationTimestamp,
   });
 
   static const DetectionEngineState initial = DetectionEngineState(
@@ -24,6 +36,7 @@ class DetectionEngineState {
     episode: [],
     episodeAnchor: null,
     nativeDwellSeen: false,
+    lastObservationTimestamp: null,
   );
 
   DetectionEngineState copyWith({
@@ -32,12 +45,15 @@ class DetectionEngineState {
     DateTime? episodeAnchor,
     bool clearAnchor = false,
     bool? nativeDwellSeen,
+    DateTime? lastObservationTimestamp,
   }) {
     return DetectionEngineState(
       state: state ?? this.state,
       episode: episode ?? this.episode,
       episodeAnchor: clearAnchor ? null : (episodeAnchor ?? this.episodeAnchor),
       nativeDwellSeen: nativeDwellSeen ?? this.nativeDwellSeen,
+      lastObservationTimestamp:
+          lastObservationTimestamp ?? this.lastObservationTimestamp,
     );
   }
 
@@ -46,6 +62,7 @@ class DetectionEngineState {
     'episode': episode.map((o) => o.toMap()).toList(),
     'episodeAnchor': episodeAnchor?.toIso8601String(),
     'nativeDwellSeen': nativeDwellSeen,
+    'lastObservationTimestamp': lastObservationTimestamp?.toIso8601String(),
   };
 
   factory DetectionEngineState.fromMap(Map<dynamic, dynamic> map) {
@@ -63,6 +80,9 @@ class DetectionEngineState {
           ? DateTime.parse(map['episodeAnchor'] as String)
           : null,
       nativeDwellSeen: map['nativeDwellSeen'] as bool? ?? false,
+      lastObservationTimestamp: map['lastObservationTimestamp'] != null
+          ? DateTime.parse(map['lastObservationTimestamp'] as String)
+          : null,
     );
   }
 }
@@ -128,12 +148,46 @@ class DetectionStateMachine {
     bool? historicalSupportsArrivalNow,
     bool? historicalSupportsDepartureNow,
   }) {
+    final result = _processCore(
+      current: current,
+      observation: observation,
+      radiusMeters: radiusMeters,
+      historicalSupportsArrivalNow: historicalSupportsArrivalNow,
+      historicalSupportsDepartureNow: historicalSupportsDepartureNow,
+    );
+    // Stamp every result with this observation's timestamp regardless of
+    // which branch produced it, so day-rollover detection has something to
+    // compare against even for a *committed* state (AT_WORKPLACE /
+    // AWAY_FROM_WORKPLACE) that carries no episode/anchor of its own.
+    return StateMachineResult(
+      nextState: result.nextState.copyWith(
+        lastObservationTimestamp: observation.timestamp,
+      ),
+      decision: result.decision,
+      diagnosticSummary: result.diagnosticSummary,
+    );
+  }
+
+  StateMachineResult _processCore({
+    required DetectionEngineState current,
+    required DetectionObservation observation,
+    required double radiusMeters,
+    bool? historicalSupportsArrivalNow,
+    bool? historicalSupportsDepartureNow,
+  }) {
     var state = current;
 
-    // Day rollover: don't let a stale in-progress episode from a previous
-    // calendar day silently influence today.
-    if (state.episodeAnchor != null &&
-        !_isSameLocalDay(state.episodeAnchor!, observation.timestamp) &&
+    // Day rollover: don't let a stale state from a previous calendar day
+    // silently influence today — whether it's an in-progress episode
+    // (checked against episodeAnchor) or a *committed* AT_WORKPLACE state
+    // with no episode of its own (checked against lastObservationTimestamp,
+    // e.g. a missed EXIT callback left yesterday's check-in never closed).
+    final staleAnchor = state.episodeAnchor != null &&
+        !_isSameLocalDay(state.episodeAnchor!, observation.timestamp);
+    final staleCommitted = state.episodeAnchor == null &&
+        state.lastObservationTimestamp != null &&
+        !_isSameLocalDay(state.lastObservationTimestamp!, observation.timestamp);
+    if ((staleAnchor || staleCommitted) &&
         state.state != AttendanceDetectionState.unknown &&
         state.state != AttendanceDetectionState.awayFromWorkplace) {
       state = DetectionEngineState.initial;

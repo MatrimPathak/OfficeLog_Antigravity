@@ -175,22 +175,71 @@ All tunables are documented, named fields on one `DetectionConfig` class
 These are deliberately conservative starting points meant to be tuned from
 real diagnostic logs, not claimed as empirically optimal.
 
+### 6.2 Deferred confirmation: getting a second sample without the user's help
+
+Everything above assumes the episode eventually receives a *second*,
+corroborating observation — that's what promotes NEAR_WORKPLACE to
+POSSIBLE_ARRIVAL, and what lets soft-dwell/sustained-absence evidence become
+true. But a bare geofence ENTER/EXIT only invokes the handler **once**. If
+the user never reopens the app and no further OS-delivered geofence event
+happens to arrive on its own, nothing would ever supply that second sample —
+the episode would sit in NEAR_WORKPLACE/POSSIBLE_ARRIVAL/POSSIBLE_DEPARTURE
+forever, and automatic detection would silently never resolve. This isn't
+hypothetical: it's the normal case for a user who arrives, locks their phone,
+and puts it in a pocket.
+
+`AttendanceDetectionEngine` closes this gap itself: whenever a processed
+observation leaves the episode in one of those three in-progress states, it
+schedules a **single deferred re-check** (`confirmation_scheduler.dart`) that
+re-runs the exact same foreground-check code path a user opening the app
+already triggers (`AutoCheckInService.checkAndLogAttendance`) — supplying the
+missing second sample without the user doing anything. Once the episode
+resolves (a decision commits, or it's discarded as a pass-by/etc.), the
+pending re-check is cancelled so it doesn't keep firing uselessly.
+
+The two platforms are honestly different here (`workmanager`, wrapping each
+platform's real background-task API — see §10):
+
+- **Android**: a real WorkManager one-off task with a precise `initialDelay`
+  (`softDwellDuration` for an arrival episode, half of that for a departure
+  episode, matching the elapsed-time evidence those states are waiting on).
+  WorkManager itself survives process death and reboot, and already handles
+  Doze deferral — nothing extra was needed here.
+- **iOS**: this plugin's own `registerOneOffTask` turned out **not** to be a
+  real deferred wake on iOS — it's a short `beginBackgroundTask` extension
+  that only helps while the app is already alive, not a mechanism that wakes
+  a suspended/terminated app later. The actual Apple API for that is
+  `BGTaskScheduler`, exposed here as `registerPeriodicTask`
+  (`BGAppRefreshTask`). iOS decides *opportunistically* when to actually run
+  it — there is no precise-delay guarantee — so the requested delay is
+  honored as a minimum only, and the task recurs (at most every 15 minutes,
+  the platform floor) until cancelled. This is the correct, real mechanism
+  for the job; it is simply not as prompt as Android's, which is an honest
+  platform limitation being surfaced, not papered over.
+
 ## 7. Persistence & resilience
 
 `detection_persistence.dart` stores one small JSON-ish record per user in a
 dedicated Hive box (`attendance_detection_state`, consistent with the existing
-`attendance_logs`/`app_logs` boxes): current `AttendanceDetectionState`,
-the current episode's bounded observation list (distances/activity only, see
-§8), and per-day idempotency keys (`checkin_2026-09-02`,
-`checkout_2026-09-02`) so a decision is never emitted twice for the same day
-even if the same OS event is redelivered, arrives out of order, or the process
-is killed and restarted mid-episode. Every entry point (`geofenceTriggered`
-background isolate, and the existing foreground check on app resume) loads
-this record fresh — the engine never assumes in-memory continuity, matching
-the existing codebase's own pattern in `background_service.dart`.
+`attendance_logs`/`app_logs` boxes): current `AttendanceDetectionState`, the
+current episode's bounded observation list (distances/activity only, see §8),
+and the timestamp of the most recently processed observation. Idempotency
+falls directly out of the state machine's own structure rather than a
+separate dedupe-key system: once a decision commits, the state transitions to
+AT_WORKPLACE/AWAY_FROM_WORKPLACE, and further matching events (a replayed
+ENTER, a duplicate DWELL) hit that state's "still inside / still outside, no
+action" branch — see §11 (duplicate prevention) for the full argument. Every
+entry point (`geofenceTriggered` background isolate, the existing foreground
+check on app resume, and the new deferred confirmation re-check in §6.2)
+loads this record fresh — the engine never assumes in-memory continuity,
+matching the existing codebase's own pattern in `background_service.dart`.
 
-A local-day rollover (`observation.date != today`) resets a stale episode back
-to UNKNOWN rather than letting yesterday's AT_WORKPLACE bleed into today,
+A local-day rollover resets a stale state back to UNKNOWN rather than letting
+yesterday bleed into today — checked against the in-progress episode's anchor
+timestamp when there is one, and otherwise against the last-processed-
+observation timestamp, so a *committed* AT_WORKPLACE with no episode of its
+own (e.g. a missed EXIT callback left a check-in never followed by a
+check-out) still resets instead of silently blocking next-day auto check-in,
 consistent with the existing `isLoggedToday`-per-date design in
 `AttendanceService`.
 
@@ -202,8 +251,13 @@ Normal operation is **OS-native low-power region monitoring only**
 this app). A "burst" — one bounded on-demand location fetch
 (`LocationAccuracy.medium`, few-second timeout, unchanged from the existing
 code) plus one activity read — runs only inside the handler for an
-OS-delivered geofence transition or an explicit app-foreground check, never on
-a timer/loop. There is no polling anywhere in this design.
+OS-delivered geofence transition, an explicit app-foreground check, or the
+deferred confirmation re-check from §6.2. There is no continuous polling
+loop anywhere in this design: the confirmation re-check is a *single*
+bounded task (Android: one-off; iOS: recurring at the 15-minute platform
+floor only, and only) that self-cancels the moment the episode it exists for
+resolves — it never runs indefinitely, and never runs at all while every
+episode is already resolved (UNKNOWN/AT_WORKPLACE/AWAY_FROM_WORKPLACE).
 
 Privacy: raw latitude/longitude is used only transiently in memory to compute
 `distanceMeters`, which is what's persisted — coordinates themselves are never
@@ -235,11 +289,12 @@ none exists to extend cleanly without a larger UI change out of scope here.
 
 ## 10. Android / iOS adapters
 
-No bespoke native (Kotlin/Swift) code was introduced. `MainActivity.kt` and
-`AppDelegate.swift` were already thin Flutter/plugin-registration shells with
-no custom background logic — the required native capabilities (region
-monitoring, activity recognition) are each already correctly implemented,
-maintained, native-API-backed Flutter plugins:
+`MainActivity.kt` and `AppDelegate.swift` were already thin Flutter/plugin-
+registration shells with no custom background logic. Every required native
+capability (region monitoring, activity recognition, deferred background
+work) is provided by an already correctly implemented, maintained, native-
+API-backed Flutter plugin — no bespoke geofencing/activity-recognition/
+scheduling logic was hand-written in Kotlin or Swift:
 
 - **Region monitoring** — `native_geofence` (already used): Android
   `GeofencingClient`, iOS `CLLocationManager` region monitoring. Kept as-is;
@@ -256,12 +311,31 @@ maintained, native-API-backed Flutter plugins:
   iOS).
 - **On-demand location** — `geolocator` (already used), unchanged accuracy/
   timeout settings.
+- **Deferred confirmation re-check** (§6.2) — `workmanager` (newly added):
+  Android `WorkManager`, iOS `BGTaskScheduler`. This is the one place a small
+  amount of platform-specific *configuration* (not custom logic) was
+  required, because `BGTaskScheduler` is enforced by Apple at the OS level:
+  - `ios/Runner/Info.plist` declares `BGTaskSchedulerPermittedIdentifiers`
+    with the single task identifier this app schedules (`UIBackgroundModes`
+    already included `fetch`, which `BGAppRefreshTask` also needs — no
+    change there).
+  - `ios/Runner/AppDelegate.swift` calls `WorkmanagerPlugin.registerLaunchHandlers()`
+    in `didFinishLaunchingWithOptions`, per the plugin's own documented
+    requirement for apps using the UIScene lifecycle (this app does — Flutter
+    registers plugins during scene connection, which is too late for
+    `BGTaskScheduler`'s registration deadline otherwise). This call could not
+    be verified against a real Xcode build in this environment (no macOS
+    available) — see the PR's validation notes.
+  - No equivalent Android manifest changes were needed: `workmanager`'s
+    Android implementation merges its own manifest entries automatically,
+    same as `native_geofence` already does.
 
-All three are wrapped by narrow interfaces in `signal_sources/`, so the shared
-engine (`attendance_detection_engine.dart`, `detection_state_machine.dart`,
-`confidence_engine.dart`, `timestamp_estimator.dart`) imports zero
-platform-specific or plugin-specific types — swapping any one plugin later
-touches exactly one adapter file.
+All platform signal sources are wrapped by narrow interfaces in
+`signal_sources/` (plus `ConfirmationScheduler` for the §6.2 mechanism), so
+the shared engine (`attendance_detection_engine.dart`,
+`detection_state_machine.dart`, `confidence_engine.dart`,
+`timestamp_estimator.dart`) imports zero platform-specific or plugin-specific
+types — swapping any one plugin later touches exactly one adapter file.
 
 ## 11. What was preserved unchanged
 
@@ -291,8 +365,18 @@ walk-in producing a check-in backdated to the walking sample, GPS jitter
 in/out/in/out producing neither a duplicate check-in nor check-out, missing
 activity/network signals still reaching HIGH confidence, out-of-order/
 duplicate/replayed events being idempotent, process-restart resumption via
-re-hydrating persisted state, and day-rollover resetting stale state).
+re-hydrating persisted state, and day-rollover resetting stale state —
+including the committed-AT_WORKPLACE-with-a-missed-EXIT case from §7).
+
+`attendance_detection_engine_test.dart` additionally exercises the full
+engine (fake signal sources + a fake `ConfirmationScheduler` + a real,
+temp-directory-backed Hive instance for persistence, with an injectable
+clock so elapsed-time-dependent evidence — soft dwell, sustained absence —
+can be tested deterministically) to verify the §6.2 scheduling contract
+itself: an in-progress episode schedules a confirmation, and a resolved
+decision (or a discarded pass-by episode) cancels it.
+
 Scenarios that require real OS behavior (actual Doze deferral, actual
-Activity Recognition Transition latency, real device reboot) are **not**
-testable in this environment and are called out explicitly in the PR
-description rather than claimed as verified.
+`BGTaskScheduler`/`ActivityRecognitionClient` delivery latency and timing,
+real device reboot) are **not** testable in this environment and are called
+out explicitly in the PR description rather than claimed as verified.
