@@ -4,10 +4,28 @@ class AttendanceSession {
   final DateTime inTime;
   final DateTime? outTime;
 
-  AttendanceSession({required this.inTime, this.outTime});
+  /// Debug metadata from the automatic detection engine for whichever half
+  /// of this session was created automatically — confidence, evidence
+  /// breakdown, timestamp rationale, etc. (see
+  /// docs/AUTO_ATTENDANCE_DESIGN.md section 9). Null for manual entries and
+  /// for all pre-existing records; purely additive, never required.
+  final Map<String, dynamic>? checkInMetadata;
+  final Map<String, dynamic>? checkOutMetadata;
+
+  AttendanceSession({
+    required this.inTime,
+    this.outTime,
+    this.checkInMetadata,
+    this.checkOutMetadata,
+  });
 
   Map<String, dynamic> toMap() {
-    return {'inTime': inTime, 'outTime': outTime};
+    return {
+      'inTime': inTime,
+      'outTime': outTime,
+      if (checkInMetadata != null) 'checkInMetadata': checkInMetadata,
+      if (checkOutMetadata != null) 'checkOutMetadata': checkOutMetadata,
+    };
   }
 
   factory AttendanceSession.fromMap(Map<String, dynamic> map) {
@@ -18,9 +36,32 @@ class AttendanceSession {
       return DateTime.now(); // Fallback
     }
 
+    Map<String, dynamic>? parseMetadata(dynamic val) {
+      if (val == null) return null;
+      if (val is Map) return Map<String, dynamic>.from(val);
+      return null;
+    }
+
     return AttendanceSession(
       inTime: parseDate(map['inTime']),
       outTime: map['outTime'] != null ? parseDate(map['outTime']) : null,
+      checkInMetadata: parseMetadata(map['checkInMetadata']),
+      checkOutMetadata: parseMetadata(map['checkOutMetadata']),
+    );
+  }
+
+  AttendanceSession copyWith({
+    DateTime? inTime,
+    DateTime? outTime,
+    bool clearOutTime = false,
+    Map<String, dynamic>? checkInMetadata,
+    Map<String, dynamic>? checkOutMetadata,
+  }) {
+    return AttendanceSession(
+      inTime: inTime ?? this.inTime,
+      outTime: clearOutTime ? null : (outTime ?? this.outTime),
+      checkInMetadata: checkInMetadata ?? this.checkInMetadata,
+      checkOutMetadata: checkOutMetadata ?? this.checkOutMetadata,
     );
   }
 

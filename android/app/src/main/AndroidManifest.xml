@@ -13,6 +13,13 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- Used by plugin: native_geofence -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Used by plugin: flutter_activity_recognition (optional evidence signal,
+         gracefully degraded when denied — see docs/AUTO_ATTENDANCE_DESIGN.md) -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+    <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION"/>
+    <!-- Used by plugin: network_info_plus (optional workplace Wi-Fi evidence signal) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
 
     <application
         android:label="OfficeLog"

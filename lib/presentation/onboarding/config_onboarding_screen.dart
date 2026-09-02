@@ -75,7 +75,13 @@ class _ConfigOnboardingScreenState
     await Permission.notification.request();
     await NotificationService.requestPermissions();
 
-    // 5. Finalize
+    // 5. Activity recognition — optional evidence signal for the detection
+    // engine (see docs/AUTO_ATTENDANCE_DESIGN.md). Never blocks setup if
+    // denied: the engine simply drops activity evidence and continues with
+    // location + geofence signals.
+    await Permission.activityRecognition.request();
+
+    // 6. Finalize
     final finalPermission = await Geolocator.checkPermission();
     if (finalPermission == LocationPermission.always) {
       await BackgroundService.checkAndRegisterTask();

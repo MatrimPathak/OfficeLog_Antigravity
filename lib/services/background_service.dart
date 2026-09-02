@@ -42,12 +42,10 @@ Future<void> geofenceTriggered(GeofenceCallbackParams params) async {
 
     final autoCheckInService = container.read(autoCheckInServiceProvider);
 
-    if (params.event == GeofenceEvent.enter ||
-        params.event == GeofenceEvent.dwell) {
-      await autoCheckInService.checkAndLogAttendance();
-    } else if (params.event == GeofenceEvent.exit) {
-      await autoCheckInService.checkAndLogOutAttendance();
-    }
+    // Every geofence transition (enter/exit/dwell) is only ever a *signal*
+    // into the detection engine now — never a direct check-in/check-out.
+    // See docs/AUTO_ATTENDANCE_DESIGN.md.
+    await autoCheckInService.handleGeofenceEvent(params.event);
 
     print('NATIVE_GEOFENCE_ISOLATE: GeofenceTriggered: Handle complete.');
     container.dispose();
