@@ -1,6 +1,20 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:network_info_plus/network_info_plus.dart';
 
+/// Android's `WifiInfo.getSSID()` returns this literal, nonempty sentinel
+/// string when it cannot determine the actual SSID (most commonly: location
+/// permission/services unavailable at read time) — it is not a real network
+/// name and must never be treated as one, in either direction: never
+/// pre-filled as a "detected" workplace SSID, and never matched against a
+/// saved one (which would otherwise turn "the OS couldn't tell" into a false
+/// positive "connected to the workplace network" every time it recurs).
+const String androidUnknownSsidSentinel = '<unknown ssid>';
+
+/// True if [ssid] (already quote-stripped/trimmed) is Android's
+/// "couldn't determine the SSID" sentinel rather than a real network name.
+bool isUnknownSsidSentinel(String ssid) =>
+    ssid.toLowerCase() == androidUnknownSsidSentinel;
+
 /// Narrow interface for the *optional* workplace Wi-Fi signal (see
 /// docs/AUTO_ATTENDANCE_DESIGN.md sections 4 and 10 —
 /// "Wi-Fi must be treated as an optional additional signal, not a mandatory
@@ -48,14 +62,18 @@ class WifiNetworkSignalSource implements NetworkSignalSource {
     if (defaultTargetPlatform != TargetPlatform.android) return null;
 
     final configured = workplaceSsidProvider()?.trim();
-    if (configured == null || configured.isEmpty) return null;
+    if (configured == null ||
+        configured.isEmpty ||
+        isUnknownSsidSentinel(configured)) {
+      return null;
+    }
 
     try {
       final current = await _networkInfo.getWifiName();
       if (current == null) return null;
       // Android commonly wraps the SSID in quotes (e.g. `"MyOfficeWifi"`).
       final normalized = current.replaceAll('"', '').trim();
-      if (normalized.isEmpty) return null;
+      if (normalized.isEmpty || isUnknownSsidSentinel(normalized)) return null;
       return normalized.toLowerCase() == configured.toLowerCase();
     } catch (_) {
       return null;

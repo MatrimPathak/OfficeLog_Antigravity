@@ -496,6 +496,7 @@ class SettingsScreen extends ConsumerWidget {
                       ref.invalidate(backgroundLocationPermissionProvider);
                       ref.invalidate(notificationPermissionProvider);
                       ref.invalidate(batteryOptimizationProvider);
+                      ref.invalidate(activityRecognitionPermissionProvider);
                     },
                   ),
                 ],
