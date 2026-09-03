@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:network_info_plus/network_info_plus.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/providers.dart';
 
@@ -18,6 +20,10 @@ class WorkplaceWifiDialog extends ConsumerStatefulWidget {
 
 class _WorkplaceWifiDialogState extends ConsumerState<WorkplaceWifiDialog> {
   late TextEditingController _controller;
+  bool _detecting = false;
+  String? _detectError;
+
+  bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
 
   @override
   void initState() {
@@ -29,6 +35,34 @@ class _WorkplaceWifiDialogState extends ConsumerState<WorkplaceWifiDialog> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _useCurrentNetwork() async {
+    setState(() {
+      _detecting = true;
+      _detectError = null;
+    });
+    try {
+      final name = await NetworkInfo().getWifiName();
+      final normalized = name?.replaceAll('"', '').trim();
+      if (!mounted) return;
+      if (normalized == null || normalized.isEmpty) {
+        setState(() {
+          _detectError = "Couldn't detect a connected Wi-Fi network.";
+        });
+      } else {
+        setState(() {
+          _controller.text = normalized;
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _detectError = "Couldn't detect a connected Wi-Fi network.";
+      });
+    } finally {
+      if (mounted) setState(() => _detecting = false);
+    }
   }
 
   @override
@@ -98,6 +132,39 @@ class _WorkplaceWifiDialogState extends ConsumerState<WorkplaceWifiDialog> {
               ),
               autofocus: true,
             ),
+            if (_isAndroid) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _detecting ? null : _useCurrentNetwork,
+                  icon: _detecting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.wifi_find_rounded, size: 18),
+                  label: Text(_detecting ? 'Detecting…' : 'Use current Wi-Fi'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.primaryColor,
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ),
+              if (_detectError != null) ...[
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _detectError!,
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                  ),
+                ),
+              ],
+            ],
             const SizedBox(height: 32),
             Row(
               children: [
