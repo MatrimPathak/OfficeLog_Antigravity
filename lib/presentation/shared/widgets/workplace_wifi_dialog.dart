@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../services/attendance_detection/signal_sources/network_signal_source.dart';
 import '../../providers/providers.dart';
 
 /// Lets the user optionally name their workplace Wi-Fi network so the
@@ -46,7 +47,9 @@ class _WorkplaceWifiDialogState extends ConsumerState<WorkplaceWifiDialog> {
       final name = await NetworkInfo().getWifiName();
       final normalized = name?.replaceAll('"', '').trim();
       if (!mounted) return;
-      if (normalized == null || normalized.isEmpty) {
+      if (normalized == null ||
+          normalized.isEmpty ||
+          isUnknownSsidSentinel(normalized)) {
         setState(() {
           _detectError = "Couldn't detect a connected Wi-Fi network.";
         });
